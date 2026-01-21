@@ -56,19 +56,16 @@
 
 ### 🚀 快速开始
 
-> [!WARNING]
-> **项目状态：** 目前处于规划阶段。完整实现预计需要 10-12 周。
+> [!TIP]
+> **项目状态：** 阶段 1 (核心基础) 已完成。目前正在进行阶段 2。
 
-#### 安装（计划中）
+#### 安装
 
 ```bash
-# 使用 Homebrew
-brew install amcli
-
-# 或从源码编译
+# 从源码编译 (需要 Rust 1.75+)
 git clone https://github.com/yourusername/amcli.git
 cd amcli
-make install
+cargo build --release
 ```
 
 #### 使用
@@ -185,19 +182,16 @@ amcli --config ~/.config/amcli/config.toml
 
 ### 🚀 Quick Start
 
-> [!WARNING]
-> **Project Status:** Currently in planning phase. Full implementation expected in 10-12 weeks.
+> [!TIP]
+> **Project Status:** Phase 1 (Core Foundation) is complete. Phase 2 is in progress.
 
-#### Installation (Planned)
+#### Installation
 
 ```bash
-# Using Homebrew
-brew install amcli
-
-# Or build from source
+# Build from source (requires Rust 1.75+)
 git clone https://github.com/yourusername/amcli.git
 cd amcli
-make install
+cargo build --release
 ```
 
 #### Usage
