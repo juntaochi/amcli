@@ -97,6 +97,7 @@ where
                     // Mode toggles
                     KeyCode::Char('s') => app.toggle_shuffle().await?,
                     KeyCode::Char('r') => app.cycle_repeat().await?,
+                    KeyCode::Char('t') => app.next_theme().await?,
 
                     // Help
                     KeyCode::Char('?') => app.toggle_help(),
