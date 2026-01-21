@@ -186,8 +186,8 @@ impl MediaPlayer for AppleMusicController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::process::ExitStatus;
     use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
 
     fn mock_output(stdout: &str, success: bool) -> Output {
         Output {
@@ -201,7 +201,9 @@ mod tests {
     async fn test_play() {
         let mut mock = MockCommandRunner::new();
         mock.expect_execute()
-            .with(mockall::predicate::eq(r#"tell application "Music" to play"#))
+            .with(mockall::predicate::eq(
+                r#"tell application "Music" to play"#,
+            ))
             .times(1)
             .returning(|_| Ok(mock_output("", true)));
 
@@ -213,7 +215,9 @@ mod tests {
     async fn test_get_volume() {
         let mut mock = MockCommandRunner::new();
         mock.expect_execute()
-            .with(mockall::predicate::eq(r#"tell application "Music" to return sound volume"#))
+            .with(mockall::predicate::eq(
+                r#"tell application "Music" to return sound volume"#,
+            ))
             .times(1)
             .returning(|_| Ok(mock_output("75", true)));
 

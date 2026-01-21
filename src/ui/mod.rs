@@ -247,12 +247,24 @@ mod tests {
 
     #[async_trait]
     impl MediaPlayer for MockPlayer {
-        async fn play(&self) -> Result<()> { Ok(()) }
-        async fn pause(&self) -> Result<()> { Ok(()) }
-        async fn toggle(&self) -> Result<()> { Ok(()) }
-        async fn next(&self) -> Result<()> { Ok(()) }
-        async fn previous(&self) -> Result<()> { Ok(()) }
-        async fn stop(&self) -> Result<()> { Ok(()) }
+        async fn play(&self) -> Result<()> {
+            Ok(())
+        }
+        async fn pause(&self) -> Result<()> {
+            Ok(())
+        }
+        async fn toggle(&self) -> Result<()> {
+            Ok(())
+        }
+        async fn next(&self) -> Result<()> {
+            Ok(())
+        }
+        async fn previous(&self) -> Result<()> {
+            Ok(())
+        }
+        async fn stop(&self) -> Result<()> {
+            Ok(())
+        }
         async fn get_current_track(&self) -> Result<Option<Track>> {
             Ok(Some(Track {
                 name: "Test Song".into(),
@@ -262,12 +274,24 @@ mod tests {
                 position: Duration::from_secs(150),
             }))
         }
-        async fn get_playback_state(&self) -> Result<PlaybackState> { Ok(PlaybackState::Playing) }
-        async fn set_volume(&self, _volume: u8) -> Result<()> { Ok(()) }
-        async fn get_volume(&self) -> Result<u8> { Ok(self.volume) }
-        async fn seek(&self, _seconds: i32) -> Result<()> { Ok(()) }
-        async fn set_shuffle(&self, _enabled: bool) -> Result<()> { Ok(()) }
-        async fn set_repeat(&self, _mode: RepeatMode) -> Result<()> { Ok(()) }
+        async fn get_playback_state(&self) -> Result<PlaybackState> {
+            Ok(PlaybackState::Playing)
+        }
+        async fn set_volume(&self, _volume: u8) -> Result<()> {
+            Ok(())
+        }
+        async fn get_volume(&self) -> Result<u8> {
+            Ok(self.volume)
+        }
+        async fn seek(&self, _seconds: i32) -> Result<()> {
+            Ok(())
+        }
+        async fn set_shuffle(&self, _enabled: bool) -> Result<()> {
+            Ok(())
+        }
+        async fn set_repeat(&self, _mode: RepeatMode) -> Result<()> {
+            Ok(())
+        }
     }
 
     #[tokio::test]
