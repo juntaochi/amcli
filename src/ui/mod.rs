@@ -1,8 +1,9 @@
 use anyhow::Result;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color, Style},
-    widgets::{Block, Borders, Gauge, Paragraph},
+    style::{Color, Modifier, Style, Stylize},
+    text::{Line, Span},
+    widgets::{Block, BorderType, Borders, Gauge, Paragraph, Wrap},
     Frame,
 };
 use std::time::Duration;
@@ -12,6 +13,61 @@ use crate::artwork::ArtworkManager;
 use crate::player::{apple_music::AppleMusicController, MediaPlayer, RepeatMode, Track};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::StatefulImage;
+use throbber_widgets_tui::{Throbber, ThrobberState, WhichUse, BRAILLE_SIX_DOUBLE};
+
+pub const COLOR_BG: Color = Color::Rgb(0, 0, 0);
+pub const COLOR_TEXT_DIM: Color = Color::Rgb(80, 60, 20);
+pub const COLOR_TEXT_BRIGHT: Color = Color::Rgb(255, 176, 0);
+pub const COLOR_ACCENT: Color = Color::Rgb(255, 215, 0);
+pub const COLOR_ALERT: Color = Color::Rgb(255, 50, 50);
+
+#[derive(Debug, Clone, Copy)]
+pub struct Theme {
+    pub name: &'static str,
+    pub primary: Color,
+    pub dim: Color,
+    pub accent: Color,
+    pub alert: Color,
+}
+
+pub const THEME_AMBER_RETRO: Theme = Theme {
+    name: "AMBER VFD",
+    primary: COLOR_TEXT_BRIGHT,
+    dim: COLOR_TEXT_DIM,
+    accent: COLOR_ACCENT,
+    alert: COLOR_ALERT,
+};
+
+pub const THEME_GREEN_VFD: Theme = Theme {
+    name: "GREEN VFD",
+    primary: Color::Rgb(0, 255, 65),
+    dim: Color::Rgb(0, 80, 20),
+    accent: Color::Rgb(50, 255, 100),
+    alert: Color::Rgb(255, 100, 0),
+};
+
+pub const THEME_CYAN_VFD: Theme = Theme {
+    name: "CYAN VFD",
+    primary: Color::Rgb(0, 255, 255),
+    dim: Color::Rgb(0, 80, 100),
+    accent: Color::Rgb(0, 150, 255),
+    alert: Color::Rgb(255, 50, 50),
+};
+
+pub const THEME_RED_ALERT: Theme = Theme {
+    name: "RED ALERT",
+    primary: Color::Rgb(255, 50, 50),
+    dim: Color::Rgb(100, 0, 0),
+    accent: Color::Rgb(255, 100, 100),
+    alert: Color::Rgb(255, 255, 0),
+};
+
+pub const THEMES: &[Theme] = &[
+    THEME_AMBER_RETRO,
+    THEME_GREEN_VFD,
+    THEME_CYAN_VFD,
+    THEME_RED_ALERT,
+];
 
 pub struct App {
     player: Box<dyn MediaPlayer>,
@@ -25,16 +81,25 @@ pub struct App {
     artwork_converter: ArtworkConverter,
     artwork_protocol: Option<StatefulProtocol>,
     current_artwork_url: Option<String>,
-
+    is_loading_artwork: bool,
+    throbber_state: ThrobberState,
+    current_theme_index: usize,
 }
 
 impl App {
     pub async fn new() -> Result<Self> {
+        let config = crate::config::Config::load()?;
         let player = Box::new(AppleMusicController::new());
-        Self::with_player(player).await
+        Self::with_player_and_config(player, config).await
     }
 
+    #[allow(dead_code)]
     pub async fn with_player(player: Box<dyn MediaPlayer>) -> Result<Self> {
+        let config = crate::config::Config::load()?;
+        Self::with_player_and_config(player, config).await
+    }
+
+    pub async fn with_player_and_config(player: Box<dyn MediaPlayer>, config: crate::config::Config) -> Result<Self> {
         let volume = player.get_volume().await.unwrap_or(50);
         let cache_dir = dirs::cache_dir()
             .unwrap_or_else(|| std::env::temp_dir())
@@ -49,10 +114,25 @@ impl App {
             show_help: false,
             current_repeat_mode: RepeatMode::Off,
             artwork_manager: ArtworkManager::new(cache_dir),
-            artwork_converter: ArtworkConverter::new()?,
+            artwork_converter: ArtworkConverter::with_mode(&config.artwork.mode)?,
             artwork_protocol: None,
             current_artwork_url: None,
+            is_loading_artwork: false,
+            throbber_state: ThrobberState::default(),
+            current_theme_index: 0,
         })
+    }
+
+    pub fn current_theme(&self) -> Theme {
+        THEMES[self.current_theme_index]
+    }
+
+    pub async fn next_theme(&mut self) -> Result<()> {
+        self.current_theme_index = (self.current_theme_index + 1) % THEMES.len();
+        self.current_artwork_url = None;
+        self.artwork_protocol = None;
+        self.update().await?;
+        Ok(())
     }
 
     pub async fn toggle_playback(&mut self) -> Result<()> {
@@ -103,11 +183,8 @@ impl App {
     }
 
     pub fn navigate_up(&mut self) {}
-
     pub fn navigate_down(&mut self) {}
-
     pub fn navigate_left(&mut self) {}
-
     pub fn navigate_right(&mut self) {}
 
     pub async fn toggle_shuffle(&mut self) -> Result<()> {
@@ -132,10 +209,16 @@ impl App {
         self.show_help
     }
 
+    pub fn get_current_track(&self) -> Option<&Track> {
+        self.current_track.as_ref()
+    }
+
+    #[allow(dead_code)]
     pub fn get_volume(&self) -> u8 {
         self.volume
     }
 
+    #[allow(dead_code)]
     pub fn is_muted(&self) -> bool {
         self.is_muted
     }
@@ -145,23 +228,28 @@ impl App {
         self.current_repeat_mode
     }
 
-    pub fn get_current_track(&self) -> Option<&Track> {
-        self.current_track.as_ref()
-    }
-
     pub async fn update(&mut self) -> Result<()> {
         self.current_track = self.player.get_current_track().await?;
         self.volume = self.player.get_volume().await.unwrap_or(self.volume);
+        self.throbber_state.calc_next();
 
         let artwork_url = self.player.get_artwork_url().await.unwrap_or(None);
         if artwork_url != self.current_artwork_url {
             self.current_artwork_url = artwork_url.clone();
             if let Some(url) = artwork_url {
-                if let Ok(img) = self.artwork_manager.get_artwork(&url).await {
+                self.is_loading_artwork = true;
+                let theme = self.current_theme();
+                if let Ok(img) = self
+                    .artwork_manager
+                    .get_artwork_themed(&url, theme.dim, theme.primary, theme.name)
+                    .await
+                {
                     self.artwork_protocol = Some(self.artwork_converter.create_protocol(img));
                 }
+                self.is_loading_artwork = false;
             } else {
                 self.artwork_protocol = None;
+                self.is_loading_artwork = false;
             }
         }
         Ok(())
@@ -169,71 +257,244 @@ impl App {
 }
 
 pub fn draw(f: &mut Frame, app: &mut App) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(2)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(12),
-            Constraint::Length(3),
-            Constraint::Length(3),
-        ])
-        .split(f.area());
+    let area = f.area();
+    let theme = app.current_theme();
 
-    let title = Paragraph::new("AMCLI - Apple Music Controller")
-        .style(Style::default().fg(Color::Cyan))
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL));
-    f.render_widget(title, chunks[0]);
+    f.render_widget(Block::default().style(Style::default().bg(COLOR_BG)), area);
 
-    let main_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(30), Constraint::Min(20)])
-        .split(chunks[1]);
-
-    let artwork_block = Block::default()
-        .title("🖼  Artwork")
+    let chassis_block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Yellow));
-    
-    let artwork_inner = artwork_block.inner(main_chunks[0]);
-    f.render_widget(artwork_block, main_chunks[0]);
+        .border_type(BorderType::Thick)
+        .border_style(Style::default().fg(theme.dim))
+        .title(vec![
+            Span::styled(" + ", Style::default().fg(theme.dim)),
+            Span::styled(
+                format!(" ❖ MODEL: AM-2026-TUI // REV: 1.0.4 // THEME: {} ", theme.name.to_uppercase()),
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" + ", Style::default().fg(theme.dim)),
+        ])
+        .title_alignment(Alignment::Center)
+        .title_bottom(vec![
+            Span::styled(" + ", Style::default().fg(theme.dim)),
+            Span::styled(" INDUSTRIAL AUDIO COMPONENT ", Style::default().fg(theme.dim).add_modifier(Modifier::DIM)),
+            Span::styled(" + ", Style::default().fg(theme.dim)),
+        ])
+        .title_alignment(Alignment::Center);
 
-    if let Some(ref mut protocol) = app.artwork_protocol {
-        let image = StatefulImage::default();
-        f.render_stateful_widget(image, artwork_inner, protocol);
-    } else {
-        let no_art = Paragraph::new("\n\nNo Artwork")
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::DarkGray));
-        f.render_widget(no_art, artwork_inner);
+    let chassis_inner = chassis_block.inner(area);
+    f.render_widget(chassis_block, area);
+
+    for y in (chassis_inner.top()..chassis_inner.bottom()).step_by(2) {
+        let line = Paragraph::new(" ".repeat(chassis_inner.width as usize))
+            .style(Style::default().bg(Color::Rgb(5, 5, 5)).add_modifier(Modifier::DIM));
+        f.render_widget(line, ratatui::layout::Rect::new(chassis_inner.left(), y, chassis_inner.width, 1));
     }
 
-    let content = if let Some(track) = app.get_current_track() {
-        format!(
-            "🎵 Now Playing\n\n\
-             Track:    {}\n\
-             Artist:   {}\n\
-             Album:    {}\n\
-             Duration: {}",
-            track.name,
-            track.artist,
-            track.album,
-            format_duration(track.duration)
-        )
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(10),
+            Constraint::Length(1),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(1),
+        ])
+        .margin(1)
+        .split(chassis_inner);
+
+    let display_area = chunks[1];
+    let tuner_area = chunks[3];
+    let control_area = chunks[4];
+
+    let screen_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Double)
+        .border_style(Style::default().fg(theme.dim));
+
+    let screen_inner = screen_block.inner(display_area);
+    f.render_widget(screen_block, display_area);
+
+    let show_artwork = display_area.width > 50;
+
+    let content_layout = if show_artwork {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(40),
+                Constraint::Length(1),
+                Constraint::Percentage(60),
+            ])
+            .split(screen_inner)
     } else {
-        "No track playing\n\n\
-         Press Space to start playback in Apple Music"
-            .to_string()
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(100)])
+            .split(screen_inner)
     };
 
-    let main_content = Paragraph::new(content).style(Style::default()).block(
-        Block::default()
-            .title("♫ Music Player")
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Green)),
-    );
-    f.render_widget(main_content, main_chunks[1]);
+    if show_artwork {
+        let artwork_chunk = content_layout[0].inner(ratatui::layout::Margin { horizontal: 2, vertical: 1 });
+
+        let w = artwork_chunk.width;
+        let h = artwork_chunk.height;
+        let size = w.min(h * 2);
+
+        let center_layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length((h - size / 2).saturating_sub(1) / 2),
+                Constraint::Length(size / 2),
+                Constraint::Min(0),
+            ])
+            .split(artwork_chunk);
+
+        let art_rect = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length((w - size) / 2),
+                Constraint::Length(size),
+                Constraint::Min(0),
+            ])
+            .split(center_layout[1])[1];
+
+        if app.is_loading_artwork {
+            let loader = Throbber::default()
+                .throbber_set(BRAILLE_SIX_DOUBLE)
+                .use_type(WhichUse::Spin)
+                .style(Style::default().fg(theme.accent));
+            f.render_stateful_widget(loader, art_rect, &mut app.throbber_state);
+        } else if let Some(ref mut protocol) = app.artwork_protocol {
+            let image = StatefulImage::default();
+            f.render_stateful_widget(image, art_rect, protocol);
+        } else {
+            let no_sig = Paragraph::new("NO SIGNAL")
+                .style(Style::default().fg(theme.dim).add_modifier(Modifier::DIM))
+                .alignment(Alignment::Center)
+                .block(Block::default().borders(Borders::NONE));
+
+            let v_center = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Percentage(45),
+                    Constraint::Length(1),
+                    Constraint::Min(0),
+                ])
+                .split(artwork_chunk);
+            f.render_widget(no_sig, v_center[1]);
+        }
+    }
+
+    let info_chunk = if show_artwork {
+        content_layout[2]
+    } else {
+        content_layout[0]
+    };
+
+    if let Some(track) = app.get_current_track() {
+        let status_line = Line::from(vec![
+            Span::styled("SYS.STATUS: ", Style::default().fg(theme.dim)),
+            Span::styled(
+                "ONLINE",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled("AUDIO: ", Style::default().fg(theme.dim)),
+            Span::styled("PCM 44.1kHz", Style::default().fg(theme.accent)),
+            Span::raw("  "),
+            Span::styled("CH: ", Style::default().fg(theme.dim)),
+            Span::styled("STEREO", Style::default().fg(theme.accent)),
+        ]);
+
+        let track_details = vec![
+            Line::from(""),
+            status_line,
+            Line::from(vec![
+                Span::raw("──────────────────────────────────────").fg(theme.dim)
+            ]),
+            Line::from(""),
+            Line::from(Span::styled(
+                "TRACK TITLE",
+                Style::default()
+                    .fg(theme.dim)
+                    .add_modifier(Modifier::ITALIC),
+            )),
+            Line::from(Span::styled(
+                format!(" {} ", track.name.to_uppercase()),
+                Style::default()
+                    .bg(theme.dim)
+                    .fg(COLOR_BG)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "ARTIST",
+                Style::default()
+                    .fg(theme.dim)
+                    .add_modifier(Modifier::ITALIC),
+            )),
+            Line::from(Span::styled(
+                format!(" {} ", track.artist.to_uppercase()),
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "ALBUM REFERENCE",
+                Style::default()
+                    .fg(theme.dim)
+                    .add_modifier(Modifier::ITALIC),
+            )),
+            Line::from(Span::styled(
+                format!(" {} ", track.album.to_uppercase()),
+                Style::default().fg(theme.primary),
+            )),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("TIME CODE: ", Style::default().fg(theme.dim)),
+                Span::styled(
+                    format!(
+                        "{} / {}",
+                        format_duration(track.position),
+                        format_duration(track.duration)
+                    ),
+                    Style::default()
+                        .fg(theme.alert)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]),
+        ];
+
+        let info_p = Paragraph::new(track_details)
+            .wrap(Wrap { trim: true })
+            .alignment(Alignment::Left)
+            .block(Block::default().padding(ratatui::widgets::Padding::new(2, 2, 1, 1)));
+
+        f.render_widget(info_p, info_chunk);
+    } else {
+        let idle_text = vec![
+            Line::from(""),
+            Line::from("WAITING FOR MEDIA INPUT..."),
+            Line::from(""),
+            Line::from(Span::styled(
+                "INSERT TAPE OR DISC",
+                Style::default()
+                    .fg(theme.alert)
+                    .add_modifier(Modifier::SLOW_BLINK),
+            )),
+        ];
+        let idle_p = Paragraph::new(idle_text)
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(theme.dim))
+            .block(Block::default().padding(ratatui::widgets::Padding::new(0, 0, 5, 0)));
+        f.render_widget(idle_p, info_chunk);
+    }
 
     if let Some(track) = app.get_current_track() {
         let progress_percent = if track.duration.as_secs() > 0 {
@@ -242,35 +503,68 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             0
         };
 
-        let progress_label = format!(
-            "{} / {}",
-            format_duration(track.position),
-            format_duration(track.duration)
-        );
-
+        let label = format!("| {:02}% | FREQ.TUNER :: ACTIVE |", progress_percent);
         let gauge = Gauge::default()
-            .block(Block::default().borders(Borders::ALL).title("Progress"))
-            .gauge_style(Style::default().fg(Color::Cyan).bg(Color::Black))
+            .block(
+                Block::default()
+                    .borders(Borders::TOP | Borders::BOTTOM)
+                    .border_style(Style::default().fg(theme.dim))
+                    .title(vec![
+                        Span::styled(" [ ", Style::default().fg(theme.dim)),
+                        Span::styled("SIGNAL STRENGTH MONITOR", Style::default().fg(theme.dim)),
+                        Span::styled(" ] ", Style::default().fg(theme.dim)),
+                    ]),
+            )
+            .gauge_style(
+                Style::default()
+                    .fg(theme.primary)
+                    .bg(Color::Rgb(15, 15, 15)),
+            )
             .percent(progress_percent.min(100))
-            .label(progress_label);
+            .label(Span::styled(
+                label,
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
+            ));
 
-        f.render_widget(gauge, chunks[2]);
-    } else {
-        let empty_block = Block::default().borders(Borders::ALL).title("Progress");
-        f.render_widget(empty_block, chunks[2]);
+        f.render_widget(gauge, tuner_area);
     }
 
-    let help_text = format!(
-        "[Space] Play/Pause | [[] Prev | []] Next | [+/-] Volume | [m] Mute | [s] Shuffle | [r] Repeat | [q] Quit  🔊 {}%{}",
-        app.get_volume(),
-        if app.is_muted() { " [MUTED]" } else { "" }
-    );
+    let controls = vec![
+        ("PLAY", "SPC"),
+        ("SKIP", "]"),
+        ("PREV", "["),
+        ("VOL+", "+"),
+        ("VOL-", "-"),
+        ("MUTE", "m"),
+        ("EXIT", "q"),
+    ];
 
-    let status = Paragraph::new(help_text)
-        .style(Style::default())
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL));
-    f.render_widget(status, chunks[3]);
+    let btn_width = control_area.width / controls.len() as u16;
+    let btn_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(vec![Constraint::Length(btn_width); controls.len()])
+        .split(control_area);
+
+    for (i, (label, key)) in controls.iter().enumerate() {
+        if i < btn_layout.len() {
+            let btn_text = Line::from(vec![
+                Span::styled(format!(" {}", label), Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
+                Span::styled(format!(" [{}] ", key), Style::default().fg(theme.dim)),
+            ]);
+
+            let btn = Paragraph::new(btn_text).alignment(Alignment::Center).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Thick)
+                    .border_style(Style::default().fg(theme.dim))
+                    .bg(Color::Rgb(10, 10, 10)),
+            );
+
+            f.render_widget(btn, btn_layout[i]);
+        }
+    }
 }
 
 fn format_duration(duration: Duration) -> String {
@@ -358,14 +652,15 @@ mod tests {
         let mut app = App::with_player(player).await.unwrap();
         app.update().await.unwrap();
 
-        let backend = TestBackend::new(80, 20);
+        let backend = TestBackend::new(120, 40);
         let mut terminal = Terminal::new(backend).unwrap();
 
         terminal.draw(|f| draw(f, &mut app)).unwrap();
 
         let buffer = terminal.backend().buffer();
-        let content = format!("{:?}", buffer);
-        assert!(content.contains("Test Song"));
-        assert!(content.contains("Test Artist"));
+        let content = format!("{:?}", buffer).to_uppercase();
+        assert!(content.contains("TEST"));
+        assert!(content.contains("SONG"));
+        assert!(content.contains("ARTIST"));
     }
 }
