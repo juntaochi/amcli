@@ -2,18 +2,47 @@
 use super::{MediaPlayer, PlaybackState, RepeatMode, Track};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use std::process::Command;
+use std::process::{Command, Output};
 use std::time::Duration;
 
-pub struct AppleMusicController;
+#[cfg(test)]
+use mockall::automock;
+
+#[cfg_attr(test, automock)]
+pub trait CommandRunner: Send + Sync {
+    fn execute(&self, script: &str) -> Result<Output>;
+}
+
+pub struct OsascriptRunner;
+
+impl CommandRunner for OsascriptRunner {
+    fn execute(&self, script: &str) -> Result<Output> {
+        Command::new("osascript")
+            .arg("-e")
+            .arg(script)
+            .output()
+            .map_err(|e| anyhow!(e))
+    }
+}
+
+pub struct AppleMusicController {
+    runner: Box<dyn CommandRunner>,
+}
 
 impl AppleMusicController {
     pub fn new() -> Self {
-        Self
+        Self {
+            runner: Box::new(OsascriptRunner),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn with_runner(runner: Box<dyn CommandRunner>) -> Self {
+        Self { runner }
     }
 
     fn execute_script(&self, script: &str) -> Result<String> {
-        let output = Command::new("osascript").arg("-e").arg(script).output()?;
+        let output = self.runner.execute(script)?;
 
         if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -151,5 +180,61 @@ impl MediaPlayer for AppleMusicController {
         );
         self.execute_script(&script)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::ExitStatus;
+    use std::os::unix::process::ExitStatusExt;
+
+    fn mock_output(stdout: &str, success: bool) -> Output {
+        Output {
+            status: ExitStatus::from_raw(if success { 0 } else { 1 }),
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: if success { vec![] } else { b"error".to_vec() },
+        }
+    }
+
+    #[tokio::test]
+    async fn test_play() {
+        let mut mock = MockCommandRunner::new();
+        mock.expect_execute()
+            .with(mockall::predicate::eq(r#"tell application "Music" to play"#))
+            .times(1)
+            .returning(|_| Ok(mock_output("", true)));
+
+        let controller = AppleMusicController::with_runner(Box::new(mock));
+        assert!(controller.play().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_get_volume() {
+        let mut mock = MockCommandRunner::new();
+        mock.expect_execute()
+            .with(mockall::predicate::eq(r#"tell application "Music" to return sound volume"#))
+            .times(1)
+            .returning(|_| Ok(mock_output("75", true)));
+
+        let controller = AppleMusicController::with_runner(Box::new(mock));
+        let volume = controller.get_volume().await.unwrap();
+        assert_eq!(volume, 75);
+    }
+
+    #[tokio::test]
+    async fn test_get_current_track() {
+        let mut mock = MockCommandRunner::new();
+        let output = "Song Name|Artist Name|Album Name|180.5|90.0";
+        mock.expect_execute()
+            .times(1)
+            .returning(move |_| Ok(mock_output(output, true)));
+
+        let controller = AppleMusicController::with_runner(Box::new(mock));
+        let track = controller.get_current_track().await.unwrap().unwrap();
+        assert_eq!(track.name, "Song Name");
+        assert_eq!(track.artist, "Artist Name");
+        assert_eq!(track.duration.as_secs(), 180);
+        assert_eq!(track.position.as_secs(), 90);
     }
 }

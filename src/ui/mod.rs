@@ -23,6 +23,10 @@ pub struct App {
 impl App {
     pub async fn new() -> Result<Self> {
         let player = Box::new(AppleMusicController::new());
+        Self::with_player(player).await
+    }
+
+    pub async fn with_player(player: Box<dyn MediaPlayer>) -> Result<Self> {
         let volume = player.get_volume().await.unwrap_or(50);
 
         Ok(Self {
@@ -227,4 +231,67 @@ fn format_duration(duration: Duration) -> String {
     let minutes = total_seconds / 60;
     let seconds = total_seconds % 60;
     format!("{:02}:{:02}", minutes, seconds)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::player::{MediaPlayer, PlaybackState, RepeatMode, Track};
+    use async_trait::async_trait;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    struct MockPlayer {
+        volume: u8,
+    }
+
+    #[async_trait]
+    impl MediaPlayer for MockPlayer {
+        async fn play(&self) -> Result<()> { Ok(()) }
+        async fn pause(&self) -> Result<()> { Ok(()) }
+        async fn toggle(&self) -> Result<()> { Ok(()) }
+        async fn next(&self) -> Result<()> { Ok(()) }
+        async fn previous(&self) -> Result<()> { Ok(()) }
+        async fn stop(&self) -> Result<()> { Ok(()) }
+        async fn get_current_track(&self) -> Result<Option<Track>> {
+            Ok(Some(Track {
+                name: "Test Song".into(),
+                artist: "Test Artist".into(),
+                album: "Test Album".into(),
+                duration: Duration::from_secs(300),
+                position: Duration::from_secs(150),
+            }))
+        }
+        async fn get_playback_state(&self) -> Result<PlaybackState> { Ok(PlaybackState::Playing) }
+        async fn set_volume(&self, _volume: u8) -> Result<()> { Ok(()) }
+        async fn get_volume(&self) -> Result<u8> { Ok(self.volume) }
+        async fn seek(&self, _seconds: i32) -> Result<()> { Ok(()) }
+        async fn set_shuffle(&self, _enabled: bool) -> Result<()> { Ok(()) }
+        async fn set_repeat(&self, _mode: RepeatMode) -> Result<()> { Ok(()) }
+    }
+
+    #[tokio::test]
+    async fn test_app_initialization() {
+        let player = Box::new(MockPlayer { volume: 70 });
+        let app = App::with_player(player).await.unwrap();
+        assert_eq!(app.get_volume(), 70);
+        assert!(!app.is_muted());
+    }
+
+    #[tokio::test]
+    async fn test_ui_rendering() {
+        let player = Box::new(MockPlayer { volume: 70 });
+        let mut app = App::with_player(player).await.unwrap();
+        app.update().await.unwrap();
+
+        let backend = TestBackend::new(80, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal.draw(|f| draw(f, &app)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content = format!("{:?}", buffer);
+        assert!(content.contains("Test Song"));
+        assert!(content.contains("Test Artist"));
+    }
 }
