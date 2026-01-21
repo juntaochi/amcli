@@ -1,4 +1,3 @@
-// src/ui/mod.rs
 use anyhow::Result;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout},
@@ -8,7 +7,11 @@ use ratatui::{
 };
 use std::time::Duration;
 
+use crate::artwork::converter::ArtworkConverter;
+use crate::artwork::ArtworkManager;
 use crate::player::{apple_music::AppleMusicController, MediaPlayer, RepeatMode, Track};
+use ratatui_image::protocol::StatefulProtocol;
+use ratatui_image::StatefulImage;
 
 pub struct App {
     player: Box<dyn MediaPlayer>,
@@ -18,6 +21,11 @@ pub struct App {
     is_muted: bool,
     show_help: bool,
     current_repeat_mode: RepeatMode,
+    artwork_manager: ArtworkManager,
+    artwork_converter: ArtworkConverter,
+    artwork_protocol: Option<StatefulProtocol>,
+    current_artwork_url: Option<String>,
+
 }
 
 impl App {
@@ -28,6 +36,9 @@ impl App {
 
     pub async fn with_player(player: Box<dyn MediaPlayer>) -> Result<Self> {
         let volume = player.get_volume().await.unwrap_or(50);
+        let cache_dir = dirs::cache_dir()
+            .unwrap_or_else(|| std::env::temp_dir())
+            .join("amcli/artwork");
 
         Ok(Self {
             player,
@@ -37,6 +48,10 @@ impl App {
             is_muted: false,
             show_help: false,
             current_repeat_mode: RepeatMode::Off,
+            artwork_manager: ArtworkManager::new(cache_dir),
+            artwork_converter: ArtworkConverter::new()?,
+            artwork_protocol: None,
+            current_artwork_url: None,
         })
     }
 
@@ -137,30 +152,62 @@ impl App {
     pub async fn update(&mut self) -> Result<()> {
         self.current_track = self.player.get_current_track().await?;
         self.volume = self.player.get_volume().await.unwrap_or(self.volume);
+
+        let artwork_url = self.player.get_artwork_url().await.unwrap_or(None);
+        if artwork_url != self.current_artwork_url {
+            self.current_artwork_url = artwork_url.clone();
+            if let Some(url) = artwork_url {
+                if let Ok(img) = self.artwork_manager.get_artwork(&url).await {
+                    self.artwork_protocol = Some(self.artwork_converter.create_protocol(img));
+                }
+            } else {
+                self.artwork_protocol = None;
+            }
+        }
         Ok(())
     }
 }
 
-pub fn draw(f: &mut Frame, app: &App) {
+pub fn draw(f: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(2)
-        .constraints(
-            [
-                Constraint::Length(3),
-                Constraint::Min(8),
-                Constraint::Length(3),
-                Constraint::Length(3),
-            ]
-            .as_ref(),
-        )
-        .split(f.size());
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(12),
+            Constraint::Length(3),
+            Constraint::Length(3),
+        ])
+        .split(f.area());
 
     let title = Paragraph::new("AMCLI - Apple Music Controller")
         .style(Style::default().fg(Color::Cyan))
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(title, chunks[0]);
+
+    let main_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(30), Constraint::Min(20)])
+        .split(chunks[1]);
+
+    let artwork_block = Block::default()
+        .title("🖼  Artwork")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow));
+    
+    let artwork_inner = artwork_block.inner(main_chunks[0]);
+    f.render_widget(artwork_block, main_chunks[0]);
+
+    if let Some(ref mut protocol) = app.artwork_protocol {
+        let image = StatefulImage::default();
+        f.render_stateful_widget(image, artwork_inner, protocol);
+    } else {
+        let no_art = Paragraph::new("\n\nNo Artwork")
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::DarkGray));
+        f.render_widget(no_art, artwork_inner);
+    }
 
     let content = if let Some(track) = app.get_current_track() {
         format!(
@@ -186,7 +233,7 @@ pub fn draw(f: &mut Frame, app: &App) {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Green)),
     );
-    f.render_widget(main_content, chunks[1]);
+    f.render_widget(main_content, main_chunks[1]);
 
     if let Some(track) = app.get_current_track() {
         let progress_percent = if track.duration.as_secs() > 0 {
@@ -292,6 +339,9 @@ mod tests {
         async fn set_repeat(&self, _mode: RepeatMode) -> Result<()> {
             Ok(())
         }
+        async fn get_artwork_url(&self) -> Result<Option<String>> {
+            Ok(Some("http://example.com/artwork.jpg".into()))
+        }
     }
 
     #[tokio::test]
@@ -311,7 +361,7 @@ mod tests {
         let backend = TestBackend::new(80, 20);
         let mut terminal = Terminal::new(backend).unwrap();
 
-        terminal.draw(|f| draw(f, &app)).unwrap();
+        terminal.draw(|f| draw(f, &mut app)).unwrap();
 
         let buffer = terminal.backend().buffer();
         let content = format!("{:?}", buffer);

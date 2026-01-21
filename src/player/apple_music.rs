@@ -181,6 +181,26 @@ impl MediaPlayer for AppleMusicController {
         self.execute_script(&script)?;
         Ok(())
     }
+
+    async fn get_artwork_url(&self) -> Result<Option<String>> {
+        let track = match self.get_current_track().await? {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+
+        let query = format!("{} {}", track.artist, track.name);
+        let url = format!(
+            "https://itunes.apple.com/search?term={}&entity=song&limit=1",
+            urlencoding::encode(&query)
+        );
+
+        let response = reqwest::get(url).await?.json::<serde_json::Value>().await?;
+        let artwork_url = response["results"][0]["artworkUrl100"]
+            .as_str()
+            .map(|s| s.replace("100x100bb", "600x600bb"));
+
+        Ok(artwork_url)
+    }
 }
 
 #[cfg(test)]
