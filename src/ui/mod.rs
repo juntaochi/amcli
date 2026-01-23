@@ -168,6 +168,7 @@ impl App {
             config.general.language,
             0, // current_theme_index will be set after App is created
             THEMES.len(),
+            config.artwork.album,
             config.artwork.mosaic,
         );
 
@@ -315,6 +316,14 @@ impl App {
                     self.current_artwork_url = None;
                     self.artwork_protocol = None;
                     self.config.ui.color_theme = THEMES[new_index].name.to_lowercase();
+                    self.config.save().await?;
+                }
+                SettingsItem::Album { enabled } => {
+                    let new_enabled = !enabled;
+                    self.config.artwork.album = new_enabled;
+                    self.settings_menu.update_album(new_enabled);
+                    self.current_artwork_url = None;
+                    self.artwork_protocol = None;
                     self.config.save().await?;
                 }
                 SettingsItem::Mosaic { enabled } => {
@@ -568,7 +577,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         display_area
     };
 
-    let show_artwork = display_area.width > 50;
+    let show_artwork = app.config.artwork.album && display_area.width > 50;
 
     let content_layout = if show_artwork {
         Layout::default()
@@ -653,12 +662,19 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let info_height = info_chunk.height as usize;
     let metadata_width = info_chunk.width;
 
-    // Detect if we should use two columns based on width OR limited vertical space for lyrics
-    // info_height - 10 (standard meta height) <= 4 lines for lyrics -> trigger wrap
-    let is_two_columns = (metadata_width > 80 || (has_lyrics && info_height <= 14)) && metadata_width >= 40;
+    let is_two_columns = show_artwork && (metadata_width > 80 || (has_lyrics && info_height <= 14)) && metadata_width >= 40;
     let meta_height = if is_two_columns { 7 } else { 10 };
 
-    let (metadata_area, lyrics_area) = if has_lyrics && info_height > meta_height + 2 {
+    let (metadata_area, lyrics_area) = if !show_artwork && has_lyrics {
+        let parts = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(45),
+                Constraint::Percentage(55),
+            ])
+            .split(info_chunk);
+        (parts[0], parts[1])
+    } else if has_lyrics && info_height > meta_height + 2 {
         let parts = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
