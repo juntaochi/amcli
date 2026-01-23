@@ -73,8 +73,8 @@ where
             match event::read()? {
                 Event::Key(key) => {
                     // Check for Ctrl+C first
-                    if key.code == KeyCode::Char('c') 
-                        && key.modifiers.contains(event::KeyModifiers::CONTROL) 
+                    if key.code == KeyCode::Char('c')
+                        && key.modifiers.contains(event::KeyModifiers::CONTROL)
                     {
                         return Ok(());
                     }

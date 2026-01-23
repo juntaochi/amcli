@@ -1,4 +1,5 @@
 use anyhow::Result;
+use image::DynamicImage;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style, Stylize},
@@ -9,11 +10,12 @@ use ratatui::{
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinHandle;
-use image::DynamicImage;
 
 use crate::artwork::converter::ArtworkConverter;
 use crate::artwork::ArtworkManager;
-use crate::lyrics::{local::LocalProvider, lrclib::LrclibProvider, netease::NeteaseProvider, Lyrics, LyricsManager};
+use crate::lyrics::{
+    local::LocalProvider, lrclib::LrclibProvider, netease::NeteaseProvider, Lyrics, LyricsManager,
+};
 use crate::player::{apple_music::AppleMusicController, MediaPlayer, RepeatMode, Track};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::StatefulImage;
@@ -83,20 +85,20 @@ pub const THEME_RED_ALERT: Theme = Theme {
 pub const THEME_MODERN_LIGHT: Theme = Theme {
     name: "MODERN",
     primary: Color::Rgb(20, 20, 20), // Terminal black
-    dim: Color::Rgb(100, 100, 100), // Terminal gray
+    dim: Color::Rgb(100, 100, 100),  // Terminal gray
     accent: Color::Rgb(0, 122, 255), // Terminal blue
-    alert: Color::Rgb(255, 59, 48), // Terminal red
-    bg: Color::Rgb(242, 242, 247), // Terminal white
+    alert: Color::Rgb(255, 59, 48),  // Terminal red
+    bg: Color::Rgb(242, 242, 247),   // Terminal white
     is_retro: false,
 };
 
 pub const THEME_TERMINAL_CLEAN: Theme = Theme {
     name: "CLEAN",
-    primary: Color::Indexed(4),    // Terminal blue
-    dim: Color::Indexed(8),         // Terminal bright black (gray)
-    accent: Color::Indexed(6),      // Terminal cyan
-    alert: Color::Indexed(1),       // Terminal red
-    bg: Color::Reset,               // Transparent - use terminal background
+    primary: Color::Indexed(4), // Terminal blue
+    dim: Color::Indexed(8),     // Terminal bright black (gray)
+    accent: Color::Indexed(6),  // Terminal cyan
+    alert: Color::Indexed(1),   // Terminal red
+    bg: Color::Reset,           // Transparent - use terminal background
     is_retro: false,
 };
 
@@ -146,7 +148,10 @@ impl App {
         Self::with_player_and_config(player, config).await
     }
 
-    pub async fn with_player_and_config(player: Box<dyn MediaPlayer>, config: crate::config::Config) -> Result<Self> {
+    pub async fn with_player_and_config(
+        player: Box<dyn MediaPlayer>,
+        config: crate::config::Config,
+    ) -> Result<Self> {
         let volume = 50;
         let cache_dir = dirs::cache_dir()
             .unwrap_or_else(|| std::env::temp_dir())
@@ -157,7 +162,7 @@ impl App {
         let lyrics_dir = dirs::home_dir()
             .unwrap_or_else(|| std::env::temp_dir())
             .join("Music/Lyrics");
-        
+
         let mut lyrics_manager = LyricsManager::new(20);
         lyrics_manager.add_provider(Box::new(LocalProvider::new(lyrics_dir)));
         lyrics_manager.add_provider(Box::new(LrclibProvider::new()));
@@ -300,7 +305,7 @@ impl App {
 
     pub async fn settings_select(&mut self) -> Result<()> {
         use crate::ui::settings::SettingsItem;
-        
+
         if let Some(item) = self.settings_menu.get_selected_item() {
             match item {
                 SettingsItem::Language { current } => {
@@ -309,7 +314,10 @@ impl App {
                     self.settings_menu.update_language(new_lang);
                     self.config.save().await?;
                 }
-                SettingsItem::Theme { current_index, total_themes } => {
+                SettingsItem::Theme {
+                    current_index,
+                    total_themes,
+                } => {
                     let new_index = (current_index + 1) % total_themes;
                     self.current_theme_index = new_index;
                     self.settings_menu.update_theme(new_index);
@@ -372,11 +380,11 @@ impl App {
             self.player.get_volume(),
             self.player.get_artwork_url()
         );
-        
+
         let new_track = track_result.ok().flatten();
         self.volume = volume_result.unwrap_or(self.volume);
         let artwork_url = artwork_result.ok().flatten();
-        
+
         let track_changed = match (&self.current_track, &new_track) {
             (Some(c), Some(n)) => c.name != n.name || c.artist != n.artist,
             (None, Some(_)) => true,
@@ -388,13 +396,12 @@ impl App {
             if let Some(task) = self.lyrics_task.take() {
                 task.abort();
             }
-            
+
             if let Some(ref track) = new_track {
                 let lyrics_manager = self.lyrics_manager.clone();
                 let track_clone = track.clone();
-                let task = tokio::spawn(async move {
-                    lyrics_manager.get_lyrics(&track_clone).await
-                });
+                let task =
+                    tokio::spawn(async move { lyrics_manager.get_lyrics(&track_clone).await });
                 self.lyrics_task = Some(task);
             }
         }
@@ -420,7 +427,7 @@ impl App {
                 let theme = self.current_theme();
                 let config = self.config.clone();
                 let is_retro = theme.is_retro;
-                
+
                 if let Some(task) = self.artwork_task.take() {
                     task.abort();
                 }
@@ -428,9 +435,27 @@ impl App {
                 let task = tokio::spawn(async move {
                     // For modern themes (non-retro), swap dark/light to fix color inversion
                     if is_retro {
-                        manager.get_artwork_themed_v2(&url, theme.dim, theme.primary, theme.name, config.artwork.mosaic, is_retro).await
+                        manager
+                            .get_artwork_themed_v2(
+                                &url,
+                                theme.dim,
+                                theme.primary,
+                                theme.name,
+                                config.artwork.mosaic,
+                                is_retro,
+                            )
+                            .await
                     } else {
-                        manager.get_artwork_themed_v2(&url, theme.primary, theme.dim, theme.name, config.artwork.mosaic, is_retro).await
+                        manager
+                            .get_artwork_themed_v2(
+                                &url,
+                                theme.primary,
+                                theme.dim,
+                                theme.name,
+                                config.artwork.mosaic,
+                                is_retro,
+                            )
+                            .await
                     }
                 });
                 self.artwork_task = Some(task);
@@ -490,7 +515,9 @@ pub fn draw_lyrics(f: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let mut lines = Vec::new();
     for (i, line) in lyrics.lines.iter().enumerate() {
         let style = if i == current_index {
-            Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(theme.dim)
         };
@@ -531,8 +558,12 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             .title_bottom(vec![
                 Span::styled(" + ", Style::default().fg(theme.dim)),
                 Span::styled(
-                    if is_jp { " 産業用音響機器 " } else { " INDUSTRIAL AUDIO COMPONENT " },
-                    Style::default().fg(theme.dim).add_modifier(Modifier::DIM)
+                    if is_jp {
+                        " 産業用音響機器 "
+                    } else {
+                        " INDUSTRIAL AUDIO COMPONENT "
+                    },
+                    Style::default().fg(theme.dim).add_modifier(Modifier::DIM),
                 ),
                 Span::styled(" + ", Style::default().fg(theme.dim)),
             ])
@@ -542,9 +573,15 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         f.render_widget(chassis_block, area);
 
         for y in (inner.top()..inner.bottom()).step_by(2) {
-            let line = Paragraph::new(" ".repeat(inner.width as usize))
-                .style(Style::default().bg(Color::Rgb(5, 5, 5)).add_modifier(Modifier::DIM));
-            f.render_widget(line, ratatui::layout::Rect::new(inner.left(), y, inner.width, 1));
+            let line = Paragraph::new(" ".repeat(inner.width as usize)).style(
+                Style::default()
+                    .bg(Color::Rgb(5, 5, 5))
+                    .add_modifier(Modifier::DIM),
+            );
+            f.render_widget(
+                line,
+                ratatui::layout::Rect::new(inner.left(), y, inner.width, 1),
+            );
         }
         inner
     } else {
@@ -597,11 +634,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
     if show_artwork {
         let artwork_column = content_layout[0];
-        
+
         // Calculate square size that fits in the column with horizontal padding
         let h_padding = 2;
         let side = artwork_column.width.saturating_sub(h_padding * 2);
-        
+
         // Vertical centering: use half the side as characters are roughly 2:1 height:width
         let char_height = side / 2;
         let v_padding = (artwork_column.height.saturating_sub(char_height)) / 2;
@@ -662,25 +699,21 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let info_height = info_chunk.height as usize;
     let metadata_width = info_chunk.width;
 
-    let is_two_columns = show_artwork && (metadata_width > 80 || (has_lyrics && info_height <= 14)) && metadata_width >= 40;
+    let is_two_columns = show_artwork
+        && (metadata_width > 80 || (has_lyrics && info_height <= 14))
+        && metadata_width >= 40;
     let meta_height = if is_two_columns { 7 } else { 10 };
 
     let (metadata_area, lyrics_area) = if !show_artwork && has_lyrics {
         let parts = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(45),
-                Constraint::Percentage(55),
-            ])
+            .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
             .split(info_chunk);
         (parts[0], parts[1])
     } else if has_lyrics && info_height > meta_height + 2 {
         let parts = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(meta_height as u16),
-                Constraint::Min(0),
-            ])
+            .constraints([Constraint::Length(meta_height as u16), Constraint::Min(0)])
             .split(info_chunk);
         (parts[0], parts[1])
     } else {
@@ -688,9 +721,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     };
 
     if let Some(track) = app.get_current_track() {
-        let status_text = if is_jp { "動作状態: " } else { "SYS.STATUS: " };
+        let status_text = if is_jp {
+            "動作状態: "
+        } else {
+            "SYS.STATUS: "
+        };
         let online_text = if is_jp { "稼働中" } else { "ONLINE" };
-        
+
         // Only show status line for retro themes
         let status_line = if theme.is_retro {
             Some(Line::from(vec![
@@ -731,10 +768,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         if is_two_columns {
             let col_layout = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Percentage(50),
-                    Constraint::Percentage(50),
-                ])
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .split(metadata_area);
 
             let mid = (items_count + 1) / 2;
@@ -748,7 +782,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 if col == 0 {
                     if let Some(ref s_line) = status_line {
                         lines.push(s_line.clone());
-                        lines.push(Line::from(vec![Span::raw("────────────────────────").fg(theme.dim)]));
+                        lines.push(Line::from(vec![
+                            Span::raw("────────────────────────").fg(theme.dim)
+                        ]));
                     }
                 } else {
                     if theme.is_retro {
@@ -758,44 +794,80 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 }
 
                 for i in start..end {
-                    lines.push(Line::from(Span::styled(labels[i], Style::default().fg(theme.dim).add_modifier(Modifier::ITALIC))));
-                    
+                    lines.push(Line::from(Span::styled(
+                        labels[i],
+                        Style::default()
+                            .fg(theme.dim)
+                            .add_modifier(Modifier::ITALIC),
+                    )));
+
                     let display_val = scroll_text(&values[i], col_width, app.animation_frame);
 
                     lines.push(Line::from(Span::styled(
                         format!(" {} ", display_val),
-                        Style::default().bg(theme.dim).fg(theme.bg).add_modifier(Modifier::BOLD)
+                        Style::default()
+                            .bg(theme.dim)
+                            .fg(theme.bg)
+                            .add_modifier(Modifier::BOLD),
                     )));
                 }
-                f.render_widget(Paragraph::new(lines).block(Block::default().padding(ratatui::widgets::Padding::new(1, 1, 0, 0))), col_layout[col]);
+                f.render_widget(
+                    Paragraph::new(lines).block(
+                        Block::default().padding(ratatui::widgets::Padding::new(1, 1, 0, 0)),
+                    ),
+                    col_layout[col],
+                );
             }
         } else {
             let mut lines = vec![Line::from("")];
             if let Some(ref s_line) = status_line {
                 lines.push(s_line.clone());
-                lines.push(Line::from(vec![Span::raw("──────────────────────────────────────").fg(theme.dim)]));
+                lines.push(Line::from(vec![Span::raw(
+                    "──────────────────────────────────────",
+                )
+                .fg(theme.dim)]));
             }
             let col_width = metadata_area.width.saturating_sub(6) as usize;
 
             for i in 0..items_count {
-                lines.push(Line::from(Span::styled(labels[i], Style::default().fg(theme.dim).add_modifier(Modifier::ITALIC))));
-                
+                lines.push(Line::from(Span::styled(
+                    labels[i],
+                    Style::default()
+                        .fg(theme.dim)
+                        .add_modifier(Modifier::ITALIC),
+                )));
+
                 let display_val = scroll_text(&values[i], col_width, app.animation_frame);
 
                 lines.push(Line::from(Span::styled(
                     format!(" {} ", display_val),
-                    Style::default().bg(theme.dim).fg(theme.bg).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .bg(theme.dim)
+                        .fg(theme.bg)
+                        .add_modifier(Modifier::BOLD),
                 )));
             }
-            f.render_widget(Paragraph::new(lines).block(Block::default().padding(ratatui::widgets::Padding::new(2, 2, 0, 0))), metadata_area);
+            f.render_widget(
+                Paragraph::new(lines)
+                    .block(Block::default().padding(ratatui::widgets::Padding::new(2, 2, 0, 0))),
+                metadata_area,
+            );
         }
 
         if lyrics_area.height > 2 {
             draw_lyrics(f, lyrics_area, app);
         }
     } else {
-        let idle_msg = if is_jp { "メディア入力待機中..." } else { "WAITING FOR MEDIA INPUT..." };
-        let insert_msg = if is_jp { "テープまたはディスクを挿入してください" } else { "INSERT TAPE OR DISC" };
+        let idle_msg = if is_jp {
+            "メディア入力待機中..."
+        } else {
+            "WAITING FOR MEDIA INPUT..."
+        };
+        let insert_msg = if is_jp {
+            "テープまたはディスクを挿入してください"
+        } else {
+            "INSERT TAPE OR DISC"
+        };
         let idle_text = vec![
             Line::from(""),
             Line::from(idle_msg),
@@ -839,11 +911,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         Span::styled(" ] ", Style::default().fg(theme.dim)),
                     ]),
             )
-            .gauge_style(
-                Style::default()
-                    .fg(theme.primary)
-                    .bg(if theme.is_retro { Color::Rgb(15, 15, 15) } else { theme.dim }),
-            )
+            .gauge_style(Style::default().fg(theme.primary).bg(if theme.is_retro {
+                Color::Rgb(15, 15, 15)
+            } else {
+                theme.dim
+            }))
             .percent(progress_percent.min(100))
             .label("");
 
@@ -881,20 +953,31 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     for (i, (label, key)) in controls.iter().enumerate() {
         if i < btn_layout.len() {
             let btn_text = Line::from(vec![
-                Span::styled(format!(" {}", label), Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    format!(" {}", label),
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(format!(" [{}] ", key), Style::default().fg(theme.dim)),
             ]);
 
             let mut btn_block = Block::default()
                 .borders(Borders::ALL)
-                .border_type(if theme.is_retro { BorderType::Thick } else { BorderType::Plain })
+                .border_type(if theme.is_retro {
+                    BorderType::Thick
+                } else {
+                    BorderType::Plain
+                })
                 .border_style(Style::default().fg(theme.dim));
-            
+
             if theme.is_retro {
                 btn_block = btn_block.bg(Color::Rgb(10, 10, 10));
             }
 
-            let btn = Paragraph::new(btn_text).alignment(Alignment::Center).block(btn_block);
+            let btn = Paragraph::new(btn_text)
+                .alignment(Alignment::Center)
+                .block(btn_block);
 
             f.render_widget(btn, btn_layout[i]);
         }
@@ -930,11 +1013,11 @@ fn scroll_text(text: &str, width: usize, frame: u32) -> String {
 
     let chars: Vec<char> = text_with_gap.chars().collect();
     let mut result = String::new();
-    
+
     for i in 0..width {
         result.push(chars[(offset + i) % total_len]);
     }
-    
+
     result
 }
 
@@ -1008,7 +1091,7 @@ mod tests {
         let mut app = App::with_player(player).await.unwrap();
         assert_eq!(app.get_volume(), 50);
         assert!(!app.is_muted());
-        
+
         app.update().await.unwrap();
         assert_eq!(app.get_volume(), 70);
     }

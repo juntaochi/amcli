@@ -7,12 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Homebrew distribution support
-- Automated release workflow for macOS binaries (Intel and Apple Silicon)
-- Comprehensive release documentation (RELEASE.md)
-
-## [0.1.0] - TBD
+## [0.1.0] - 2026-01-24
 
 ### Added
 
