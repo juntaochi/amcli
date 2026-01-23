@@ -3,17 +3,24 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Gauge, Paragraph, Wrap},
+    widgets::{Block, BorderType, Borders, Gauge, Paragraph},
     Frame,
 };
 use std::time::Duration;
+use tokio::task::JoinHandle;
+use image::DynamicImage;
 
 use crate::artwork::converter::ArtworkConverter;
 use crate::artwork::ArtworkManager;
+use crate::lyrics::{local::LocalProvider, lrclib::LrclibProvider, netease::NeteaseProvider, Lyrics, LyricsManager};
 use crate::player::{apple_music::AppleMusicController, MediaPlayer, RepeatMode, Track};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::StatefulImage;
 use throbber_widgets_tui::{Throbber, ThrobberState, WhichUse, BRAILLE_SIX_DOUBLE};
+
+// Settings module
+pub mod settings;
+use settings::SettingsMenu;
 
 pub const COLOR_BG: Color = Color::Rgb(0, 0, 0);
 pub const COLOR_TEXT_DIM: Color = Color::Rgb(80, 60, 20);
@@ -28,6 +35,8 @@ pub struct Theme {
     pub dim: Color,
     pub accent: Color,
     pub alert: Color,
+    pub bg: Color,
+    pub is_retro: bool,
 }
 
 pub const THEME_AMBER_RETRO: Theme = Theme {
@@ -36,6 +45,8 @@ pub const THEME_AMBER_RETRO: Theme = Theme {
     dim: COLOR_TEXT_DIM,
     accent: COLOR_ACCENT,
     alert: COLOR_ALERT,
+    bg: COLOR_BG,
+    is_retro: true,
 };
 
 pub const THEME_GREEN_VFD: Theme = Theme {
@@ -44,6 +55,8 @@ pub const THEME_GREEN_VFD: Theme = Theme {
     dim: Color::Rgb(0, 80, 20),
     accent: Color::Rgb(50, 255, 100),
     alert: Color::Rgb(255, 100, 0),
+    bg: COLOR_BG,
+    is_retro: true,
 };
 
 pub const THEME_CYAN_VFD: Theme = Theme {
@@ -52,6 +65,8 @@ pub const THEME_CYAN_VFD: Theme = Theme {
     dim: Color::Rgb(0, 80, 100),
     accent: Color::Rgb(0, 150, 255),
     alert: Color::Rgb(255, 50, 50),
+    bg: COLOR_BG,
+    is_retro: true,
 };
 
 pub const THEME_RED_ALERT: Theme = Theme {
@@ -60,6 +75,28 @@ pub const THEME_RED_ALERT: Theme = Theme {
     dim: Color::Rgb(100, 0, 0),
     accent: Color::Rgb(255, 100, 100),
     alert: Color::Rgb(255, 255, 0),
+    bg: COLOR_BG,
+    is_retro: true,
+};
+
+pub const THEME_MODERN_LIGHT: Theme = Theme {
+    name: "MODERN",
+    primary: Color::Rgb(20, 20, 20), // Terminal black
+    dim: Color::Rgb(100, 100, 100), // Terminal gray
+    accent: Color::Rgb(0, 122, 255), // Terminal blue
+    alert: Color::Rgb(255, 59, 48), // Terminal red
+    bg: Color::Rgb(242, 242, 247), // Terminal white
+    is_retro: false,
+};
+
+pub const THEME_TERMINAL_CLEAN: Theme = Theme {
+    name: "CLEAN",
+    primary: Color::Indexed(4),    // Terminal blue
+    dim: Color::Indexed(8),         // Terminal bright black (gray)
+    accent: Color::Indexed(6),      // Terminal cyan
+    alert: Color::Indexed(1),       // Terminal red
+    bg: Color::Reset,               // Transparent - use terminal background
+    is_retro: false,
 };
 
 pub const THEMES: &[Theme] = &[
@@ -67,6 +104,8 @@ pub const THEMES: &[Theme] = &[
     THEME_GREEN_VFD,
     THEME_CYAN_VFD,
     THEME_RED_ALERT,
+    THEME_MODERN_LIGHT,
+    THEME_TERMINAL_CLEAN,
 ];
 
 pub struct App {
@@ -82,8 +121,14 @@ pub struct App {
     artwork_protocol: Option<StatefulProtocol>,
     current_artwork_url: Option<String>,
     is_loading_artwork: bool,
+    artwork_task: Option<JoinHandle<Result<DynamicImage>>>,
     throbber_state: ThrobberState,
     current_theme_index: usize,
+    animation_frame: u32,
+    lyrics_manager: LyricsManager,
+    current_lyrics: Option<Lyrics>,
+    config: crate::config::Config,
+    settings_menu: SettingsMenu,
 }
 
 impl App {
@@ -105,6 +150,22 @@ impl App {
             .unwrap_or_else(|| std::env::temp_dir())
             .join("amcli/artwork");
 
+        let lyrics_dir = dirs::home_dir()
+            .unwrap_or_else(|| std::env::temp_dir())
+            .join("Music/Lyrics");
+        
+        let mut lyrics_manager = LyricsManager::new(20);
+        lyrics_manager.add_provider(Box::new(LocalProvider::new(lyrics_dir)));
+        lyrics_manager.add_provider(Box::new(LrclibProvider::new()));
+        lyrics_manager.add_provider(Box::new(NeteaseProvider::new()));
+
+        let settings_menu = SettingsMenu::new(
+            config.general.language,
+            0, // current_theme_index will be set after App is created
+            THEMES.len(),
+            config.artwork.mosaic,
+        );
+
         Ok(Self {
             player,
             current_track: None,
@@ -118,8 +179,14 @@ impl App {
             artwork_protocol: None,
             current_artwork_url: None,
             is_loading_artwork: false,
+            artwork_task: None,
             throbber_state: ThrobberState::default(),
             current_theme_index: 0,
+            animation_frame: 0,
+            lyrics_manager,
+            current_lyrics: None,
+            config,
+            settings_menu,
         })
     }
 
@@ -204,6 +271,62 @@ impl App {
         self.show_help = !self.show_help;
     }
 
+    pub fn toggle_settings_menu(&mut self) {
+        self.settings_menu.toggle();
+    }
+
+    pub fn is_settings_open(&self) -> bool {
+        self.settings_menu.is_open
+    }
+
+    pub fn close_settings(&mut self) {
+        self.settings_menu.close();
+    }
+
+    pub fn settings_navigate_up(&mut self) {
+        self.settings_menu.navigate_up();
+    }
+
+    pub fn settings_navigate_down(&mut self) {
+        self.settings_menu.navigate_down();
+    }
+
+    pub async fn settings_select(&mut self) -> Result<()> {
+        use crate::ui::settings::SettingsItem;
+        
+        if let Some(item) = self.settings_menu.get_selected_item() {
+            match item {
+                SettingsItem::Language { current } => {
+                    let new_lang = current.toggle();
+                    self.config.general.language = new_lang;
+                    self.settings_menu.update_language(new_lang);
+                    self.config.save()?;
+                }
+                SettingsItem::Theme { current_index, total_themes } => {
+                    let new_index = (current_index + 1) % total_themes;
+                    self.current_theme_index = new_index;
+                    self.settings_menu.update_theme(new_index);
+                    self.current_artwork_url = None;
+                    self.artwork_protocol = None;
+                    self.config.ui.color_theme = THEMES[new_index].name.to_lowercase();
+                    self.config.save()?;
+                }
+                SettingsItem::Mosaic { enabled } => {
+                    let new_enabled = !enabled;
+                    self.config.artwork.mosaic = new_enabled;
+                    self.settings_menu.update_mosaic(new_enabled);
+                    self.current_artwork_url = None;
+                    self.artwork_protocol = None;
+                    self.config.save()?;
+                }
+                SettingsItem::Close => {
+                    self.settings_menu.close();
+                }
+            }
+        }
+        Ok(())
+    }
+
     #[allow(dead_code)]
     pub fn is_showing_help(&self) -> bool {
         self.show_help
@@ -229,26 +352,66 @@ impl App {
     }
 
     pub async fn update(&mut self) -> Result<()> {
-        self.current_track = self.player.get_current_track().await?;
+        let new_track = self.player.get_current_track().await?;
+        
+        let track_changed = match (&self.current_track, &new_track) {
+            (Some(c), Some(n)) => c.name != n.name || c.artist != n.artist,
+            (None, Some(_)) => true,
+            _ => false,
+        };
+
+        if track_changed {
+            if let Some(ref track) = new_track {
+                self.current_lyrics = self.lyrics_manager.get_lyrics(track).await.ok().flatten();
+            } else {
+                self.current_lyrics = None;
+            }
+        }
+
+        self.current_track = new_track;
         self.volume = self.player.get_volume().await.unwrap_or(self.volume);
         self.throbber_state.calc_next();
+        self.animation_frame = self.animation_frame.wrapping_add(1);
 
         let artwork_url = self.player.get_artwork_url().await.unwrap_or(None);
         if artwork_url != self.current_artwork_url {
             self.current_artwork_url = artwork_url.clone();
             if let Some(url) = artwork_url {
                 self.is_loading_artwork = true;
+                let manager = self.artwork_manager.clone();
                 let theme = self.current_theme();
-                if let Ok(img) = self
-                    .artwork_manager
-                    .get_artwork_themed(&url, theme.dim, theme.primary, theme.name)
-                    .await
-                {
-                    self.artwork_protocol = Some(self.artwork_converter.create_protocol(img));
+                let config = self.config.clone();
+                let is_retro = theme.is_retro;
+                
+                if let Some(task) = self.artwork_task.take() {
+                    task.abort();
                 }
-                self.is_loading_artwork = false;
+
+                let task = tokio::spawn(async move {
+                    // For modern themes (non-retro), swap dark/light to fix color inversion
+                    if is_retro {
+                        manager.get_artwork_themed_v2(&url, theme.dim, theme.primary, theme.name, config.artwork.mosaic, is_retro).await
+                    } else {
+                        manager.get_artwork_themed_v2(&url, theme.primary, theme.dim, theme.name, config.artwork.mosaic, is_retro).await
+                    }
+                });
+                self.artwork_task = Some(task);
             } else {
                 self.artwork_protocol = None;
+                self.is_loading_artwork = false;
+                if let Some(task) = self.artwork_task.take() {
+                    task.abort();
+                }
+            }
+        }
+
+        if let Some(task) = &mut self.artwork_task {
+            if task.is_finished() {
+                if let Some(task) = self.artwork_task.take() {
+                    if let Ok(Ok(img)) = task.await {
+                        self.artwork_protocol = Some(self.artwork_converter.create_protocol(img));
+                    }
+                }
                 self.is_loading_artwork = false;
             }
         }
@@ -256,67 +419,125 @@ impl App {
     }
 }
 
+pub fn draw_lyrics(f: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let theme = app.current_theme();
+    let track = match app.get_current_track() {
+        Some(t) => t,
+        None => return,
+    };
+
+    let lyrics = match &app.current_lyrics {
+        Some(l) => l,
+        None => {
+            let p = Paragraph::new("NO LYRICS AVAILABLE")
+                .style(Style::default().fg(theme.dim).add_modifier(Modifier::DIM))
+                .alignment(Alignment::Center);
+            let v_center = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Percentage(45),
+                    Constraint::Length(1),
+                    Constraint::Min(0),
+                ])
+                .split(area);
+            f.render_widget(p, v_center[1]);
+            return;
+        }
+    };
+
+    let current_index = lyrics.find_index(track.position);
+    let h = area.height as usize;
+    let mid = h / 2;
+
+    let mut lines = Vec::new();
+    for (i, line) in lyrics.lines.iter().enumerate() {
+        let style = if i == current_index {
+            Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.dim)
+        };
+        lines.push(Line::from(Span::styled(&line.text, style)));
+    }
+
+    let scroll = current_index.saturating_sub(mid) as u16;
+    let p = Paragraph::new(lines)
+        .alignment(Alignment::Center)
+        .scroll((scroll, 0));
+
+    f.render_widget(p, area);
+}
+
 pub fn draw(f: &mut Frame, app: &mut App) {
     let area = f.area();
     let theme = app.current_theme();
+    let is_jp = app.config.general.language == crate::config::Language::Japanese;
 
-    f.render_widget(Block::default().style(Style::default().bg(COLOR_BG)), area);
+    f.render_widget(Block::default().style(Style::default().bg(theme.bg)), area);
 
-    let chassis_block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Thick)
-        .border_style(Style::default().fg(theme.dim))
-        .title(vec![
-            Span::styled(" + ", Style::default().fg(theme.dim)),
-            Span::styled(
-                format!(" ❖ MODEL: AM-2026-TUI // REV: 1.0.4 // THEME: {} ", theme.name.to_uppercase()),
-                Style::default()
-                    .fg(theme.primary)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(" + ", Style::default().fg(theme.dim)),
-        ])
-        .title_alignment(Alignment::Center)
-        .title_bottom(vec![
-            Span::styled(" + ", Style::default().fg(theme.dim)),
-            Span::styled(" INDUSTRIAL AUDIO COMPONENT ", Style::default().fg(theme.dim).add_modifier(Modifier::DIM)),
-            Span::styled(" + ", Style::default().fg(theme.dim)),
-        ])
-        .title_alignment(Alignment::Center);
+    let chassis_inner = if theme.is_retro {
+        let chassis_block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Thick)
+            .border_style(Style::default().fg(theme.dim))
+            .title(vec![
+                Span::styled(" + ", Style::default().fg(theme.dim)),
+                Span::styled(
+                    format!(" ❖ MODEL: AMCLI // THEME: {} ", theme.name.to_uppercase()),
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" + ", Style::default().fg(theme.dim)),
+            ])
+            .title_alignment(Alignment::Center)
+            .title_bottom(vec![
+                Span::styled(" + ", Style::default().fg(theme.dim)),
+                Span::styled(
+                    if is_jp { " 産業用音響機器 " } else { " INDUSTRIAL AUDIO COMPONENT " },
+                    Style::default().fg(theme.dim).add_modifier(Modifier::DIM)
+                ),
+                Span::styled(" + ", Style::default().fg(theme.dim)),
+            ])
+            .title_alignment(Alignment::Center);
 
-    let chassis_inner = chassis_block.inner(area);
-    f.render_widget(chassis_block, area);
+        let inner = chassis_block.inner(area);
+        f.render_widget(chassis_block, area);
 
-    for y in (chassis_inner.top()..chassis_inner.bottom()).step_by(2) {
-        let line = Paragraph::new(" ".repeat(chassis_inner.width as usize))
-            .style(Style::default().bg(Color::Rgb(5, 5, 5)).add_modifier(Modifier::DIM));
-        f.render_widget(line, ratatui::layout::Rect::new(chassis_inner.left(), y, chassis_inner.width, 1));
-    }
+        for y in (inner.top()..inner.bottom()).step_by(2) {
+            let line = Paragraph::new(" ".repeat(inner.width as usize))
+                .style(Style::default().bg(Color::Rgb(5, 5, 5)).add_modifier(Modifier::DIM));
+            f.render_widget(line, ratatui::layout::Rect::new(inner.left(), y, inner.width, 1));
+        }
+        inner
+    } else {
+        area
+    };
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),
             Constraint::Min(10),
-            Constraint::Length(1),
             Constraint::Length(3),
             Constraint::Length(3),
-            Constraint::Length(1),
         ])
-        .margin(1)
         .split(chassis_inner);
 
-    let display_area = chunks[1];
-    let tuner_area = chunks[3];
-    let control_area = chunks[4];
+    let display_area = chunks[0];
+    let tuner_area = chunks[1];
+    let control_area = chunks[2];
 
-    let screen_block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Double)
-        .border_style(Style::default().fg(theme.dim));
+    let screen_inner = if theme.is_retro {
+        let screen_block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Double)
+            .border_style(Style::default().fg(theme.dim));
 
-    let screen_inner = screen_block.inner(display_area);
-    f.render_widget(screen_block, display_area);
+        let inner = screen_block.inner(display_area);
+        f.render_widget(screen_block, display_area);
+        inner
+    } else {
+        display_area
+    };
 
     let show_artwork = display_area.width > 50;
 
@@ -324,9 +545,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(40),
+                Constraint::Percentage(42),
                 Constraint::Length(1),
-                Constraint::Percentage(60),
+                Constraint::Percentage(57),
             ])
             .split(screen_inner)
     } else {
@@ -337,29 +558,33 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     };
 
     if show_artwork {
-        let artwork_chunk = content_layout[0].inner(ratatui::layout::Margin { horizontal: 2, vertical: 1 });
+        let artwork_column = content_layout[0];
+        
+        // Calculate square size that fits in the column with horizontal padding
+        let h_padding = 2;
+        let side = artwork_column.width.saturating_sub(h_padding * 2);
+        
+        // Vertical centering: use half the side as characters are roughly 2:1 height:width
+        let char_height = side / 2;
+        let v_padding = (artwork_column.height.saturating_sub(char_height)) / 2;
 
-        let w = artwork_chunk.width;
-        let h = artwork_chunk.height;
-        let size = w.min(h * 2);
-
-        let center_layout = Layout::default()
+        let art_rect = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length((h - size / 2).saturating_sub(1) / 2),
-                Constraint::Length(size / 2),
+                Constraint::Length(v_padding),
+                Constraint::Length(char_height),
                 Constraint::Min(0),
             ])
-            .split(artwork_chunk);
+            .split(artwork_column)[1];
 
         let art_rect = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Length((w - size) / 2),
-                Constraint::Length(size),
+                Constraint::Length(h_padding),
+                Constraint::Length(side),
                 Constraint::Min(0),
             ])
-            .split(center_layout[1])[1];
+            .split(art_rect)[1];
 
         if app.is_loading_artwork {
             let loader = Throbber::default()
@@ -371,7 +596,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             let image = StatefulImage::default();
             f.render_stateful_widget(image, art_rect, protocol);
         } else {
-            let no_sig = Paragraph::new("NO SIGNAL")
+            let no_sig_text = if is_jp { "信号なし" } else { "NO SIGNAL" };
+            let no_sig = Paragraph::new(no_sig_text)
                 .style(Style::default().fg(theme.dim).add_modifier(Modifier::DIM))
                 .alignment(Alignment::Center)
                 .block(Block::default().borders(Borders::NONE));
@@ -383,7 +609,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                     Constraint::Length(1),
                     Constraint::Min(0),
                 ])
-                .split(artwork_chunk);
+                .split(art_rect);
             f.render_widget(no_sig, v_center[1]);
         }
     }
@@ -394,96 +620,143 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         content_layout[0]
     };
 
-    if let Some(track) = app.get_current_track() {
-        let status_line = Line::from(vec![
-            Span::styled("SYS.STATUS: ", Style::default().fg(theme.dim)),
-            Span::styled(
-                "ONLINE",
-                Style::default()
-                    .fg(Color::Green)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("  "),
-            Span::styled("AUDIO: ", Style::default().fg(theme.dim)),
-            Span::styled("PCM 44.1kHz", Style::default().fg(theme.accent)),
-            Span::raw("  "),
-            Span::styled("CH: ", Style::default().fg(theme.dim)),
-            Span::styled("STEREO", Style::default().fg(theme.accent)),
-        ]);
+    let has_lyrics = app.current_lyrics.is_some();
+    let info_height = info_chunk.height as usize;
+    let metadata_width = info_chunk.width;
 
-        let track_details = vec![
-            Line::from(""),
-            status_line,
-            Line::from(vec![
-                Span::raw("──────────────────────────────────────").fg(theme.dim)
-            ]),
-            Line::from(""),
-            Line::from(Span::styled(
-                "TRACK TITLE",
-                Style::default()
-                    .fg(theme.dim)
-                    .add_modifier(Modifier::ITALIC),
-            )),
-            Line::from(Span::styled(
-                format!(" {} ", track.name.to_uppercase()),
-                Style::default()
-                    .bg(theme.dim)
-                    .fg(COLOR_BG)
-                    .add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-            Line::from(Span::styled(
-                "ARTIST",
-                Style::default()
-                    .fg(theme.dim)
-                    .add_modifier(Modifier::ITALIC),
-            )),
-            Line::from(Span::styled(
-                format!(" {} ", track.artist.to_uppercase()),
-                Style::default()
-                    .fg(theme.primary)
-                    .add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-            Line::from(Span::styled(
-                "ALBUM REFERENCE",
-                Style::default()
-                    .fg(theme.dim)
-                    .add_modifier(Modifier::ITALIC),
-            )),
-            Line::from(Span::styled(
-                format!(" {} ", track.album.to_uppercase()),
-                Style::default().fg(theme.primary),
-            )),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("TIME CODE: ", Style::default().fg(theme.dim)),
+    // Detect if we should use two columns based on width OR limited vertical space for lyrics
+    // info_height - 10 (standard meta height) <= 4 lines for lyrics -> trigger wrap
+    let is_two_columns = (metadata_width > 80 || (has_lyrics && info_height <= 14)) && metadata_width >= 40;
+    let meta_height = if is_two_columns { 7 } else { 10 };
+
+    let (metadata_area, lyrics_area) = if has_lyrics && info_height > meta_height + 2 {
+        let parts = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(meta_height as u16),
+                Constraint::Min(0),
+            ])
+            .split(info_chunk);
+        (parts[0], parts[1])
+    } else {
+        (info_chunk, ratatui::layout::Rect::default())
+    };
+
+    if let Some(track) = app.get_current_track() {
+        let status_text = if is_jp { "動作状態: " } else { "SYS.STATUS: " };
+        let online_text = if is_jp { "稼働中" } else { "ONLINE" };
+        
+        // Only show status line for retro themes
+        let status_line = if theme.is_retro {
+            Some(Line::from(vec![
+                Span::styled(status_text, Style::default().fg(theme.dim)),
                 Span::styled(
-                    format!(
-                        "{} / {}",
-                        format_duration(track.position),
-                        format_duration(track.duration)
-                    ),
+                    online_text,
                     Style::default()
-                        .fg(theme.alert)
+                        .fg(Color::Green)
                         .add_modifier(Modifier::BOLD),
                 ),
-            ]),
+                Span::raw("  "),
+                Span::styled("PCM 44.1kHz / STEREO", Style::default().fg(theme.accent)),
+            ]))
+        } else {
+            None
+        };
+
+        let labels = if is_jp {
+            vec!["曲名", "アーティスト", "アルバム"]
+        } else {
+            vec!["TRACK TITLE", "ARTIST", "ALBUM REFERENCE"]
+        };
+
+        let values = vec![
+            track.name.to_uppercase(),
+            track.artist.to_uppercase(),
+            track.album.to_uppercase(),
+            format!(
+                "{} / {}",
+                format_duration(track.position),
+                format_duration(track.duration)
+            ),
         ];
 
-        let info_p = Paragraph::new(track_details)
-            .wrap(Wrap { trim: true })
-            .alignment(Alignment::Left)
-            .block(Block::default().padding(ratatui::widgets::Padding::new(2, 2, 1, 1)));
+        let available_height = metadata_area.height as usize;
+        let items_count = labels.len();
 
-        f.render_widget(info_p, info_chunk);
+        if is_two_columns {
+            let col_layout = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(50),
+                    Constraint::Percentage(50),
+                ])
+                .split(metadata_area);
+
+            let mid = (items_count + 1) / 2;
+            let col_width = col_layout[0].width.saturating_sub(6) as usize;
+
+            for col in 0..2 {
+                let start = if col == 0 { 0 } else { mid };
+                let end = if col == 0 { mid } else { items_count };
+                let mut lines = vec![Line::from("")];
+
+                if col == 0 {
+                    if let Some(ref s_line) = status_line {
+                        lines.push(s_line.clone());
+                        lines.push(Line::from(vec![Span::raw("────────────────────────").fg(theme.dim)]));
+                    }
+                } else {
+                    if theme.is_retro {
+                        lines.push(Line::from(""));
+                        lines.push(Line::from(""));
+                    }
+                }
+
+                for i in start..end {
+                    lines.push(Line::from(Span::styled(labels[i], Style::default().fg(theme.dim).add_modifier(Modifier::ITALIC))));
+                    
+                    let display_val = scroll_text(&values[i], col_width, app.animation_frame);
+
+                    lines.push(Line::from(Span::styled(
+                        format!(" {} ", display_val),
+                        Style::default().bg(theme.dim).fg(theme.bg).add_modifier(Modifier::BOLD)
+                    )));
+                }
+                f.render_widget(Paragraph::new(lines).block(Block::default().padding(ratatui::widgets::Padding::new(1, 1, 0, 0))), col_layout[col]);
+            }
+        } else {
+            let mut lines = vec![Line::from("")];
+            if let Some(ref s_line) = status_line {
+                lines.push(s_line.clone());
+                lines.push(Line::from(vec![Span::raw("──────────────────────────────────────").fg(theme.dim)]));
+            }
+            let col_width = metadata_area.width.saturating_sub(6) as usize;
+
+            for i in 0..items_count {
+                lines.push(Line::from(Span::styled(labels[i], Style::default().fg(theme.dim).add_modifier(Modifier::ITALIC))));
+                
+                let display_val = scroll_text(&values[i], col_width, app.animation_frame);
+
+                lines.push(Line::from(Span::styled(
+                    format!(" {} ", display_val),
+                    Style::default().bg(theme.dim).fg(theme.bg).add_modifier(Modifier::BOLD)
+                )));
+            }
+            f.render_widget(Paragraph::new(lines).block(Block::default().padding(ratatui::widgets::Padding::new(2, 2, 0, 0))), metadata_area);
+        }
+
+        if lyrics_area.height > 2 {
+            draw_lyrics(f, lyrics_area, app);
+        }
     } else {
+        let idle_msg = if is_jp { "メディア入力待機中..." } else { "WAITING FOR MEDIA INPUT..." };
+        let insert_msg = if is_jp { "テープまたはディスクを挿入してください" } else { "INSERT TAPE OR DISC" };
         let idle_text = vec![
             Line::from(""),
-            Line::from("WAITING FOR MEDIA INPUT..."),
+            Line::from(idle_msg),
             Line::from(""),
             Line::from(Span::styled(
-                "INSERT TAPE OR DISC",
+                insert_msg,
                 Style::default()
                     .fg(theme.alert)
                     .add_modifier(Modifier::SLOW_BLINK),
@@ -503,7 +776,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             0
         };
 
-        let label = format!("| {:02}% | FREQ.TUNER :: ACTIVE |", progress_percent);
+        let label = format!(
+            " {}/{} | {:02}% ",
+            format_duration_seconds(track.position),
+            format_duration_seconds(track.duration),
+            progress_percent
+        );
+
         let gauge = Gauge::default()
             .block(
                 Block::default()
@@ -511,35 +790,42 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                     .border_style(Style::default().fg(theme.dim))
                     .title(vec![
                         Span::styled(" [ ", Style::default().fg(theme.dim)),
-                        Span::styled("SIGNAL STRENGTH MONITOR", Style::default().fg(theme.dim)),
+                        Span::styled(label, Style::default().fg(theme.dim)),
                         Span::styled(" ] ", Style::default().fg(theme.dim)),
                     ]),
             )
             .gauge_style(
                 Style::default()
                     .fg(theme.primary)
-                    .bg(Color::Rgb(15, 15, 15)),
+                    .bg(if theme.is_retro { Color::Rgb(15, 15, 15) } else { theme.dim }),
             )
             .percent(progress_percent.min(100))
-            .label(Span::styled(
-                label,
-                Style::default()
-                    .fg(theme.primary)
-                    .add_modifier(Modifier::BOLD),
-            ));
+            .label("");
 
         f.render_widget(gauge, tuner_area);
     }
 
-    let controls = vec![
-        ("PLAY", "SPC"),
-        ("SKIP", "]"),
-        ("PREV", "["),
-        ("VOL+", "+"),
-        ("VOL-", "-"),
-        ("MUTE", "m"),
-        ("EXIT", "q"),
-    ];
+    let controls = if is_jp {
+        vec![
+            ("▶再生", "SPC"),
+            ("▶▶次", "]"),
+            ("◀◀前", "["),
+            ("音量＋", "+"),
+            ("音量－", "-"),
+            ("消音", "m"),
+            ("電源", "q"),
+        ]
+    } else {
+        vec![
+            ("PLAY", "SPC"),
+            ("SKIP", "]"),
+            ("PREV", "["),
+            ("VOL+", "+"),
+            ("VOL-", "-"),
+            ("MUTE", "m"),
+            ("EXIT", "q"),
+        ]
+    };
 
     let btn_width = control_area.width / controls.len() as u16;
     let btn_layout = Layout::default()
@@ -554,17 +840,30 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 Span::styled(format!(" [{}] ", key), Style::default().fg(theme.dim)),
             ]);
 
-            let btn = Paragraph::new(btn_text).alignment(Alignment::Center).block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Thick)
-                    .border_style(Style::default().fg(theme.dim))
-                    .bg(Color::Rgb(10, 10, 10)),
-            );
+            let mut btn_block = Block::default()
+                .borders(Borders::ALL)
+                .border_type(if theme.is_retro { BorderType::Thick } else { BorderType::Plain })
+                .border_style(Style::default().fg(theme.dim));
+            
+            if theme.is_retro {
+                btn_block = btn_block.bg(Color::Rgb(10, 10, 10));
+            }
+
+            let btn = Paragraph::new(btn_text).alignment(Alignment::Center).block(btn_block);
 
             f.render_widget(btn, btn_layout[i]);
         }
     }
+
+    // Render settings menu overlay if open
+    if app.settings_menu.is_open {
+        app.settings_menu.render(f, theme);
+    }
+}
+
+fn format_duration_seconds(duration: Duration) -> String {
+    let total_seconds = duration.as_secs();
+    format!("{}s", total_seconds)
 }
 
 fn format_duration(duration: Duration) -> String {
@@ -572,6 +871,26 @@ fn format_duration(duration: Duration) -> String {
     let minutes = total_seconds / 60;
     let seconds = total_seconds % 60;
     format!("{:02}:{:02}", minutes, seconds)
+}
+
+fn scroll_text(text: &str, width: usize, frame: u32) -> String {
+    let char_count = text.chars().count();
+    if char_count <= width {
+        return text.to_string();
+    }
+
+    let text_with_gap = format!("{}   ", text);
+    let total_len = text_with_gap.chars().count();
+    let offset = (frame as usize / 2) % total_len;
+
+    let chars: Vec<char> = text_with_gap.chars().collect();
+    let mut result = String::new();
+    
+    for i in 0..width {
+        result.push(chars[(offset + i) % total_len]);
+    }
+    
+    result
 }
 
 #[cfg(test)]
