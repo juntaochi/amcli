@@ -333,33 +333,40 @@ impl Lyrics {
 
 ## 开发路线图 / Development Roadmap
 
-### Phase 1: Core Foundation (Week 1-2) ✅ 进行中
+### Phase 1: Core Foundation (Week 1-2) ✅ 已完成
 
 - [x] 项目初始化（Cargo.toml, src/ 结构）
 - [x] MediaPlayer trait 定义
 - [x] Apple Music AppleScript 桥接
-- [ ] Ratatui 基础 UI
-- [ ] 键盘事件处理
-- [ ] 基础播放控制测试
+- [x] Ratatui 基础 UI
+- [x] 键盘事件处理
+- [x] 基础播放控制测试
 
-### Phase 2: Enhanced UI & Album Art (Week 3-4)
+### Phase 2: Enhanced UI & Album Art (Week 3-4) ✅ 已完成
 
-- [ ] 专辑封面下载和缓存
-- [ ] ASCII/True Color 转换器
-- [ ] 美化 UI 布局
-- [ ] 配置系统（Serde + TOML）
+- [x] 专辑封面下载和缓存
+- [x] ASCII/True Color 转换器（通过 ratatui-image）
+- [x] 美化 UI 布局（VFD 复古风格）
+- [x] 配置系统（Serde + TOML）
+- [x] **主题系统**（6 种主题：AMBER/GREEN/CYAN/RED/MODERN/CLEAN）
+- [x] **非阻塞异步封面加载**（后台 tokio 任务）
+- [x] **马赛克模式**（像素化艺术效果）
 
-### Phase 3: Lyrics Integration (Week 5-6)
+### Phase 3: Lyrics Integration (Week 5-6) ✅ 已完成
 
-- [ ] LRC 解析器
-- [ ] 歌词 API 集成（Netease, Musixmatch）
-- [ ] 实时同步显示
+- [x] LRC 解析器（支持多时间戳、偏移量）
+- [x] 歌词 API 集成（本地文件、Netease、LRCLIB）
+- [x] 实时同步显示（毫秒级精度，自动滚动）
+- [x] **多语言 UI 支持**（English / Japanese）
+- [x] **设置菜单**（语言/主题/马赛克切换）
+- [x] **性能优化**（UI 更新节流至 500ms）
 
-### Phase 4-6: Advanced Features & Release
+### Phase 4-6: Advanced Features & Release (计划中)
 
 - [ ] 播放列表管理
+- [ ] 音乐库浏览（专辑/艺术家/歌曲）
 - [ ] 插件系统（trait objects）
-- [ ] 性能优化
+- [ ] 性能优化（profiling, flamegraph）
 - [ ] 打包发布（Homebrew, cargo-dist）
 
 ---
@@ -447,23 +454,21 @@ cargo watch -x run     # 自动重载
 
 ```toml
 # ~/.config/amcli/config.toml
-[app]
-language = "zh-CN"
-theme = "dark"
+[general]
+language = "en"  # "en" (English) or "jp" (Japanese)
 
-[player]
-default_player = "apple_music"
-default_volume = 50
+[artwork]
+enabled = true
+cache_size = 100
+mode = "auto"  # auto, ascii, blocks, truecolor
+mosaic = true  # Mosaic pixelated effect
 
 [ui]
-show_album_art = true
-album_art_mode = "truecolor"
-show_lyrics = true
-
-[lyrics]
-auto_download = true
-providers = ["local", "netease", "musixmatch"]
+color_theme = "default"  # amber_retro, green_vfd, cyan_vfd, red_alert, modern, clean
+show_help_on_start = true
 ```
+
+**注意**：完整配置示例请参考 `configs/config.example.toml`
 
 ---
 
@@ -486,6 +491,7 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 ---
 
-**Last Updated:** 2026-01-21  
-**Project Status:** 🚧 Phase 1 - Core Foundation  
-**Language:** Rust 🦀
+**Last Updated:** 2026-01-23  
+**Project Status:** ✅ Phase 1-3 Complete | 🚧 Phase 4 - Advanced Features  
+**Language:** Rust 🦀  
+**Completion:** ~55% (68/130 tasks)

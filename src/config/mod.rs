@@ -1,6 +1,5 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -95,36 +94,36 @@ impl Default for Config {
 }
 
 impl Config {
-    fn get_config_path() -> Result<PathBuf> {
+    async fn get_config_path() -> Result<PathBuf> {
         let config_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("amcli");
 
-        if !config_dir.exists() {
-            fs::create_dir_all(&config_dir)?;
+        if !tokio::fs::try_exists(&config_dir).await.unwrap_or(false) {
+            tokio::fs::create_dir_all(&config_dir).await?;
         }
 
         Ok(config_dir.join("config.toml"))
     }
 
-    pub fn load() -> Result<Self> {
-        let config_path = Self::get_config_path()?;
+    pub async fn load() -> Result<Self> {
+        let config_path = Self::get_config_path().await?;
 
-        if config_path.exists() {
-            let content = fs::read_to_string(config_path)?;
+        if tokio::fs::try_exists(&config_path).await.unwrap_or(false) {
+            let content = tokio::fs::read_to_string(config_path).await?;
             let config = toml::from_str(&content)?;
             Ok(config)
         } else {
             let config = Config::default();
-            config.save()?;
+            config.save().await?;
             Ok(config)
         }
     }
 
-    pub fn save(&self) -> Result<()> {
-        let config_path = Self::get_config_path()?;
+    pub async fn save(&self) -> Result<()> {
+        let config_path = Self::get_config_path().await?;
         let content = toml::to_string_pretty(self)?;
-        fs::write(config_path, content)?;
+        tokio::fs::write(config_path, content).await?;
         Ok(())
     }
 }

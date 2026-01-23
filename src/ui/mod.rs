@@ -6,6 +6,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Gauge, Paragraph},
     Frame,
 };
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinHandle;
 use image::DynamicImage;
@@ -125,30 +126,33 @@ pub struct App {
     throbber_state: ThrobberState,
     current_theme_index: usize,
     animation_frame: u32,
-    lyrics_manager: LyricsManager,
+    lyrics_manager: Arc<LyricsManager>,
     current_lyrics: Option<Lyrics>,
+    lyrics_task: Option<JoinHandle<Result<Option<Lyrics>>>>,
     config: crate::config::Config,
     settings_menu: SettingsMenu,
 }
 
 impl App {
     pub async fn new() -> Result<Self> {
-        let config = crate::config::Config::load()?;
+        let config = crate::config::Config::load().await?;
         let player = Box::new(AppleMusicController::new());
         Self::with_player_and_config(player, config).await
     }
 
     #[allow(dead_code)]
     pub async fn with_player(player: Box<dyn MediaPlayer>) -> Result<Self> {
-        let config = crate::config::Config::load()?;
+        let config = crate::config::Config::load().await?;
         Self::with_player_and_config(player, config).await
     }
 
     pub async fn with_player_and_config(player: Box<dyn MediaPlayer>, config: crate::config::Config) -> Result<Self> {
-        let volume = player.get_volume().await.unwrap_or(50);
+        let volume = 50;
         let cache_dir = dirs::cache_dir()
             .unwrap_or_else(|| std::env::temp_dir())
             .join("amcli/artwork");
+
+        tokio::fs::create_dir_all(&cache_dir).await.ok();
 
         let lyrics_dir = dirs::home_dir()
             .unwrap_or_else(|| std::env::temp_dir())
@@ -158,6 +162,7 @@ impl App {
         lyrics_manager.add_provider(Box::new(LocalProvider::new(lyrics_dir)));
         lyrics_manager.add_provider(Box::new(LrclibProvider::new()));
         lyrics_manager.add_provider(Box::new(NeteaseProvider::new()));
+        let lyrics_manager = Arc::new(lyrics_manager);
 
         let settings_menu = SettingsMenu::new(
             config.general.language,
@@ -185,6 +190,7 @@ impl App {
             animation_frame: 0,
             lyrics_manager,
             current_lyrics: None,
+            lyrics_task: None,
             config,
             settings_menu,
         })
@@ -300,7 +306,7 @@ impl App {
                     let new_lang = current.toggle();
                     self.config.general.language = new_lang;
                     self.settings_menu.update_language(new_lang);
-                    self.config.save()?;
+                    self.config.save().await?;
                 }
                 SettingsItem::Theme { current_index, total_themes } => {
                     let new_index = (current_index + 1) % total_themes;
@@ -309,7 +315,7 @@ impl App {
                     self.current_artwork_url = None;
                     self.artwork_protocol = None;
                     self.config.ui.color_theme = THEMES[new_index].name.to_lowercase();
-                    self.config.save()?;
+                    self.config.save().await?;
                 }
                 SettingsItem::Mosaic { enabled } => {
                     let new_enabled = !enabled;
@@ -317,7 +323,7 @@ impl App {
                     self.settings_menu.update_mosaic(new_enabled);
                     self.current_artwork_url = None;
                     self.artwork_protocol = None;
-                    self.config.save()?;
+                    self.config.save().await?;
                 }
                 SettingsItem::Close => {
                     self.settings_menu.close();
@@ -352,7 +358,15 @@ impl App {
     }
 
     pub async fn update(&mut self) -> Result<()> {
-        let new_track = self.player.get_current_track().await?;
+        let (track_result, volume_result, artwork_result) = tokio::join!(
+            self.player.get_current_track(),
+            self.player.get_volume(),
+            self.player.get_artwork_url()
+        );
+        
+        let new_track = track_result.ok().flatten();
+        self.volume = volume_result.unwrap_or(self.volume);
+        let artwork_url = artwork_result.ok().flatten();
         
         let track_changed = match (&self.current_track, &new_track) {
             (Some(c), Some(n)) => c.name != n.name || c.artist != n.artist,
@@ -361,19 +375,34 @@ impl App {
         };
 
         if track_changed {
+            self.current_lyrics = None;
+            if let Some(task) = self.lyrics_task.take() {
+                task.abort();
+            }
+            
             if let Some(ref track) = new_track {
-                self.current_lyrics = self.lyrics_manager.get_lyrics(track).await.ok().flatten();
-            } else {
-                self.current_lyrics = None;
+                let lyrics_manager = self.lyrics_manager.clone();
+                let track_clone = track.clone();
+                let task = tokio::spawn(async move {
+                    lyrics_manager.get_lyrics(&track_clone).await
+                });
+                self.lyrics_task = Some(task);
+            }
+        }
+
+        if let Some(task) = &mut self.lyrics_task {
+            if task.is_finished() {
+                if let Some(task) = self.lyrics_task.take() {
+                    if let Ok(Ok(Some(lyrics))) = task.await {
+                        self.current_lyrics = Some(lyrics);
+                    }
+                }
             }
         }
 
         self.current_track = new_track;
-        self.volume = self.player.get_volume().await.unwrap_or(self.volume);
         self.throbber_state.calc_next();
         self.animation_frame = self.animation_frame.wrapping_add(1);
-
-        let artwork_url = self.player.get_artwork_url().await.unwrap_or(None);
         if artwork_url != self.current_artwork_url {
             self.current_artwork_url = artwork_url.clone();
             if let Some(url) = artwork_url {
@@ -680,7 +709,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             ),
         ];
 
-        let available_height = metadata_area.height as usize;
+        let _available_height = metadata_area.height as usize;
         let items_count = labels.len();
 
         if is_two_columns {
@@ -960,9 +989,12 @@ mod tests {
     #[tokio::test]
     async fn test_app_initialization() {
         let player = Box::new(MockPlayer { volume: 70 });
-        let app = App::with_player(player).await.unwrap();
-        assert_eq!(app.get_volume(), 70);
+        let mut app = App::with_player(player).await.unwrap();
+        assert_eq!(app.get_volume(), 50);
         assert!(!app.is_muted());
+        
+        app.update().await.unwrap();
+        assert_eq!(app.get_volume(), 70);
     }
 
     #[tokio::test]
