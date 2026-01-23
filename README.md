@@ -81,12 +81,31 @@
 
 #### 安装
 
+**方式 1: Homebrew (推荐 - macOS)**
+
 ```bash
-# 从源码编译 (需要 Rust 1.75+)
-git clone https://github.com/yourusername/amcli.git
+# 添加 tap
+brew tap juntaochi/tap
+
+# 安装
+brew install amcli
+```
+
+**方式 2: 从源码编译**
+
+```bash
+# 需要 Rust 1.75+
+git clone https://github.com/juntaochi/amcli.git
 cd amcli
 cargo build --release
+
+# 安装到系统
+cargo install --path .
 ```
+
+**方式 3: 下载预编译二进制**
+
+从 [Releases](https://github.com/juntaochi/amcli/releases) 页面下载适合你系统的二进制文件。
 
 #### 使用
 
@@ -250,12 +269,31 @@ show_help_on_start = true
 
 #### Installation
 
+**Option 1: Homebrew (Recommended - macOS)**
+
 ```bash
-# Build from source (requires Rust 1.75+)
-git clone https://github.com/yourusername/amcli.git
+# Add tap
+brew tap juntaochi/tap
+
+# Install
+brew install amcli
+```
+
+**Option 2: Build from Source**
+
+```bash
+# Requires Rust 1.75+
+git clone https://github.com/juntaochi/amcli.git
 cd amcli
 cargo build --release
+
+# Install to system
+cargo install --path .
 ```
+
+**Option 3: Download Pre-built Binary**
+
+Download the binary for your system from the [Releases](https://github.com/juntaochi/amcli/releases) page.
 
 #### Usage
 

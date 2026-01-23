@@ -2,10 +2,12 @@
 name = "amcli"
 version = "0.1.0"
 edition = "2021"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["juntaochi"]
 description = "Apple Music Command Line Interface - A powerful TUI for controlling Apple Music"
 license = "MIT"
-repository = "https://github.com/yourusername/amcli"
+repository = "https://github.com/juntaochi/amcli"
+homepage = "https://github.com/juntaochi/amcli"
+readme = "README.md"
 keywords = ["tui", "music", "apple-music", "terminal", "player"]
 categories = ["command-line-utilities", "multimedia"]
 
