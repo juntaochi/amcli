@@ -59,6 +59,8 @@ pub struct ArtworkConfig {
     pub enabled: bool,
     pub cache_size: usize,
     pub mode: String,
+    #[serde(default = "default_album")]
+    pub album: bool,
     #[serde(default = "default_mosaic")]
     pub mosaic: bool,
 }
@@ -67,6 +69,10 @@ pub struct ArtworkConfig {
 pub struct UIConfig {
     pub color_theme: String,
     pub show_help_on_start: bool,
+}
+
+fn default_album() -> bool {
+    true
 }
 
 fn default_mosaic() -> bool {
@@ -80,6 +86,7 @@ impl Default for Config {
                 enabled: true,
                 cache_size: 100,
                 mode: "auto".into(),
+                album: true,
                 mosaic: true,
             },
             ui: UIConfig {

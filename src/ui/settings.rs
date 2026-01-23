@@ -18,20 +18,37 @@ pub struct SettingsMenu {
 
 #[derive(Debug, Clone)]
 pub enum SettingsItem {
-    Language { current: Language },
-    Theme { current_index: usize, total_themes: usize },
-    Mosaic { enabled: bool },
+    Language {
+        current: Language,
+    },
+    Theme {
+        current_index: usize,
+        total_themes: usize,
+    },
+    Album {
+        enabled: bool,
+    },
+    Mosaic {
+        enabled: bool,
+    },
     Close,
 }
 
 impl SettingsMenu {
-    pub fn new(language: Language, theme_index: usize, total_themes: usize, mosaic: bool) -> Self {
+    pub fn new(
+        language: Language,
+        theme_index: usize,
+        total_themes: usize,
+        album: bool,
+        mosaic: bool,
+    ) -> Self {
         let items = vec![
             SettingsItem::Language { current: language },
             SettingsItem::Theme {
                 current_index: theme_index,
                 total_themes,
             },
+            SettingsItem::Album { enabled: album },
             SettingsItem::Mosaic { enabled: mosaic },
             SettingsItem::Close,
         ];
@@ -62,13 +79,48 @@ impl SettingsMenu {
     pub fn navigate_up(&mut self) {
         if self.selected_index > 0 {
             self.selected_index -= 1;
+            if self.should_skip_current_item() {
+                if self.selected_index > 0 {
+                    self.selected_index -= 1;
+                } else {
+                    self.selected_index += 1;
+                }
+            }
         }
     }
 
     pub fn navigate_down(&mut self) {
         if self.selected_index < self.items.len() - 1 {
             self.selected_index += 1;
+            if self.should_skip_current_item() {
+                if self.selected_index < self.items.len() - 1 {
+                    self.selected_index += 1;
+                } else {
+                    self.selected_index -= 1;
+                }
+            }
         }
+    }
+
+    fn should_skip_current_item(&self) -> bool {
+        let album_enabled = self
+            .items
+            .iter()
+            .find_map(|item| {
+                if let SettingsItem::Album { enabled } = item {
+                    Some(*enabled)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(true);
+
+        if let Some(current_item) = self.items.get(self.selected_index) {
+            if let SettingsItem::Mosaic { .. } = current_item {
+                return !album_enabled;
+            }
+        }
+        false
     }
 
     pub fn update_language(&mut self, language: Language) {
@@ -89,8 +141,14 @@ impl SettingsMenu {
         }
     }
 
-    pub fn update_mosaic(&mut self, enabled: bool) {
+    pub fn update_album(&mut self, enabled: bool) {
         if let Some(item) = self.items.get_mut(2) {
+            *item = SettingsItem::Album { enabled };
+        }
+    }
+
+    pub fn update_mosaic(&mut self, enabled: bool) {
+        if let Some(item) = self.items.get_mut(3) {
             *item = SettingsItem::Mosaic { enabled };
         }
     }
@@ -158,7 +216,25 @@ impl SettingsMenu {
         // Render menu items
         let mut list_items = Vec::new();
 
+        let album_enabled = self
+            .items
+            .iter()
+            .find_map(|item| {
+                if let SettingsItem::Album { enabled } = item {
+                    Some(*enabled)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(true);
+
         for (i, item) in self.items.iter().enumerate() {
+            if let SettingsItem::Mosaic { .. } = item {
+                if !album_enabled {
+                    continue;
+                }
+            }
+
             let is_selected = i == self.selected_index;
             let (label, value) = match item {
                 SettingsItem::Language { current } => {
@@ -175,8 +251,20 @@ impl SettingsMenu {
                     "Theme / テーマ",
                     format!("{} / {}", current_index + 1, total_themes),
                 ),
+                SettingsItem::Album { enabled } => {
+                    let status = if *enabled {
+                        "ON / オン"
+                    } else {
+                        "OFF / オフ"
+                    };
+                    ("Album Artwork / アルバム", status.to_string())
+                }
                 SettingsItem::Mosaic { enabled } => {
-                    let status = if *enabled { "ON / オン" } else { "OFF / オフ" };
+                    let status = if *enabled {
+                        "ON / オン"
+                    } else {
+                        "OFF / オフ"
+                    };
                     ("Mosaic Artwork / モザイク", status.to_string())
                 }
                 SettingsItem::Close => ("Close / 閉じる", String::new()),
@@ -199,7 +287,9 @@ impl SettingsMenu {
                     Span::styled(
                         format!("  {}: ", label),
                         if is_selected {
-                            Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)
+                            Style::default()
+                                .fg(theme.primary)
+                                .add_modifier(Modifier::BOLD)
                         } else {
                             Style::default().fg(theme.dim)
                         },
