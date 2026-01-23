@@ -60,32 +60,38 @@ impl AppleMusicController {
 #[async_trait]
 impl MediaPlayer for AppleMusicController {
     async fn play(&self) -> Result<()> {
-        self.execute_script(r#"tell application "Music" to play"#).await?;
+        self.execute_script(r#"tell application "Music" to play"#)
+            .await?;
         Ok(())
     }
 
     async fn pause(&self) -> Result<()> {
-        self.execute_script(r#"tell application "Music" to pause"#).await?;
+        self.execute_script(r#"tell application "Music" to pause"#)
+            .await?;
         Ok(())
     }
 
     async fn toggle(&self) -> Result<()> {
-        self.execute_script(r#"tell application "Music" to playpause"#).await?;
+        self.execute_script(r#"tell application "Music" to playpause"#)
+            .await?;
         Ok(())
     }
 
     async fn next(&self) -> Result<()> {
-        self.execute_script(r#"tell application "Music" to next track"#).await?;
+        self.execute_script(r#"tell application "Music" to next track"#)
+            .await?;
         Ok(())
     }
 
     async fn previous(&self) -> Result<()> {
-        self.execute_script(r#"tell application "Music" to previous track"#).await?;
+        self.execute_script(r#"tell application "Music" to previous track"#)
+            .await?;
         Ok(())
     }
 
     async fn stop(&self) -> Result<()> {
-        self.execute_script(r#"tell application "Music" to stop"#).await?;
+        self.execute_script(r#"tell application "Music" to stop"#)
+            .await?;
         Ok(())
     }
 
@@ -197,16 +203,11 @@ impl MediaPlayer for AppleMusicController {
         );
 
         let timeout_duration = std::time::Duration::from_secs(3);
-        let response = tokio::time::timeout(
-            timeout_duration,
-            reqwest::get(url)
-        ).await??;
-        
-        let json = tokio::time::timeout(
-            timeout_duration,
-            response.json::<serde_json::Value>()
-        ).await??;
-        
+        let response = tokio::time::timeout(timeout_duration, reqwest::get(url)).await??;
+
+        let json =
+            tokio::time::timeout(timeout_duration, response.json::<serde_json::Value>()).await??;
+
         let artwork_url = json["results"][0]["artworkUrl100"]
             .as_str()
             .map(|s| s.replace("100x100bb", "600x600bb"));
