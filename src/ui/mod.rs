@@ -489,7 +489,7 @@ pub fn draw_lyrics(f: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         None => return,
     };
 
-    let lyrics = match &app.current_lyrics {
+    let lyrics: &Lyrics = match &app.current_lyrics {
         Some(l) => l,
         None => {
             let p = Paragraph::new("NO LYRICS AVAILABLE")
