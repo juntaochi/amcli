@@ -2,25 +2,27 @@
 use super::{MediaPlayer, PlaybackState, RepeatMode, Track};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use std::process::{Command, Output};
 use std::time::Duration;
 
 #[cfg(test)]
 use mockall::automock;
 
 #[cfg_attr(test, automock)]
+#[async_trait]
 pub trait CommandRunner: Send + Sync {
-    fn execute(&self, script: &str) -> Result<Output>;
+    async fn execute(&self, script: &str) -> Result<std::process::Output>;
 }
 
 pub struct OsascriptRunner;
 
+#[async_trait]
 impl CommandRunner for OsascriptRunner {
-    fn execute(&self, script: &str) -> Result<Output> {
-        Command::new("osascript")
+    async fn execute(&self, script: &str) -> Result<std::process::Output> {
+        tokio::process::Command::new("osascript")
             .arg("-e")
             .arg(script)
             .output()
+            .await
             .map_err(|e| anyhow!(e))
     }
 }
@@ -41,8 +43,8 @@ impl AppleMusicController {
         Self { runner }
     }
 
-    fn execute_script(&self, script: &str) -> Result<String> {
-        let output = self.runner.execute(script)?;
+    async fn execute_script(&self, script: &str) -> Result<String> {
+        let output = self.runner.execute(script).await?;
 
         if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -58,32 +60,32 @@ impl AppleMusicController {
 #[async_trait]
 impl MediaPlayer for AppleMusicController {
     async fn play(&self) -> Result<()> {
-        self.execute_script(r#"tell application "Music" to play"#)?;
+        self.execute_script(r#"tell application "Music" to play"#).await?;
         Ok(())
     }
 
     async fn pause(&self) -> Result<()> {
-        self.execute_script(r#"tell application "Music" to pause"#)?;
+        self.execute_script(r#"tell application "Music" to pause"#).await?;
         Ok(())
     }
 
     async fn toggle(&self) -> Result<()> {
-        self.execute_script(r#"tell application "Music" to playpause"#)?;
+        self.execute_script(r#"tell application "Music" to playpause"#).await?;
         Ok(())
     }
 
     async fn next(&self) -> Result<()> {
-        self.execute_script(r#"tell application "Music" to next track"#)?;
+        self.execute_script(r#"tell application "Music" to next track"#).await?;
         Ok(())
     }
 
     async fn previous(&self) -> Result<()> {
-        self.execute_script(r#"tell application "Music" to previous track"#)?;
+        self.execute_script(r#"tell application "Music" to previous track"#).await?;
         Ok(())
     }
 
     async fn stop(&self) -> Result<()> {
-        self.execute_script(r#"tell application "Music" to stop"#)?;
+        self.execute_script(r#"tell application "Music" to stop"#).await?;
         Ok(())
     }
 
@@ -103,7 +105,7 @@ impl MediaPlayer for AppleMusicController {
             end tell
         "#;
 
-        let result = self.execute_script(script)?;
+        let result = self.execute_script(script).await?;
 
         if result.is_empty() {
             return Ok(None);
@@ -125,7 +127,7 @@ impl MediaPlayer for AppleMusicController {
 
     async fn get_playback_state(&self) -> Result<PlaybackState> {
         let script = r#"tell application "Music" to return player state as string"#;
-        let state = self.execute_script(script)?;
+        let state = self.execute_script(script).await?;
 
         match state.as_str() {
             "playing" => Ok(PlaybackState::Playing),
@@ -140,13 +142,13 @@ impl MediaPlayer for AppleMusicController {
             r#"tell application "Music" to set sound volume to {}"#,
             volume
         );
-        self.execute_script(&script)?;
+        self.execute_script(&script).await?;
         Ok(())
     }
 
     async fn get_volume(&self) -> Result<u8> {
         let script = r#"tell application "Music" to return sound volume"#;
-        let volume = self.execute_script(script)?;
+        let volume = self.execute_script(script).await?;
         Ok(volume.parse()?)
     }
 
@@ -155,7 +157,7 @@ impl MediaPlayer for AppleMusicController {
             r#"tell application "Music" to set player position to (player position + {})"#,
             seconds
         );
-        self.execute_script(&script)?;
+        self.execute_script(&script).await?;
         Ok(())
     }
 
@@ -164,7 +166,7 @@ impl MediaPlayer for AppleMusicController {
             r#"tell application "Music" to set shuffle enabled to {}"#,
             enabled
         );
-        self.execute_script(&script)?;
+        self.execute_script(&script).await?;
         Ok(())
     }
 
@@ -178,7 +180,7 @@ impl MediaPlayer for AppleMusicController {
             r#"tell application "Music" to set song repeat to {}"#,
             mode_str
         );
-        self.execute_script(&script)?;
+        self.execute_script(&script).await?;
         Ok(())
     }
 
@@ -194,8 +196,18 @@ impl MediaPlayer for AppleMusicController {
             urlencoding::encode(&query)
         );
 
-        let response = reqwest::get(url).await?.json::<serde_json::Value>().await?;
-        let artwork_url = response["results"][0]["artworkUrl100"]
+        let timeout_duration = std::time::Duration::from_secs(3);
+        let response = tokio::time::timeout(
+            timeout_duration,
+            reqwest::get(url)
+        ).await??;
+        
+        let json = tokio::time::timeout(
+            timeout_duration,
+            response.json::<serde_json::Value>()
+        ).await??;
+        
+        let artwork_url = json["results"][0]["artworkUrl100"]
             .as_str()
             .map(|s| s.replace("100x100bb", "600x600bb"));
 
@@ -209,8 +221,8 @@ mod tests {
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
 
-    fn mock_output(stdout: &str, success: bool) -> Output {
-        Output {
+    fn mock_output(stdout: &str, success: bool) -> std::process::Output {
+        std::process::Output {
             status: ExitStatus::from_raw(if success { 0 } else { 1 }),
             stdout: stdout.as_bytes().to_vec(),
             stderr: if success { vec![] } else { b"error".to_vec() },

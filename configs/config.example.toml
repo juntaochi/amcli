@@ -1,153 +1,107 @@
 # AMCLI Configuration File
 # Copy this file to ~/.config/amcli/config.toml and customize
+# 
+# NOTE: This config reflects the CURRENT implementation (Phase 3 - Completed)
+# Features marked as [FUTURE] are planned for Phase 4+ but not yet implemented
 
-[app]
-# Application basic settings
-language = "zh-CN"  # zh-CN, en-US
-theme = "dark"      # dark, light, custom
-log_level = "info"  # debug, info, warn, error
+# ============================================================================
+# GENERAL SETTINGS
+# ============================================================================
+[general]
+# UI Language
+# Options: "en" (English), "jp" (Japanese/日本語)
+language = "en"
 
-[player]
-# Default media player
-default_player = "apple_music"  # apple_music, spotify, vlc
-auto_start_player = true
-start_playing_on_launch = false
-
-# Playback settings
-default_volume = 50
-remember_volume = true
-crossfade_duration = 0  # seconds, 0 = disabled
-
-[ui]
-# User interface settings
-show_album_art = true
-album_art_width = 40
-album_art_height = 20
-album_art_mode = "truecolor"  # ascii, blocks, truecolor
-
-show_lyrics = true
-lyrics_mode = "scroll"  # scroll, karaoke, full
-lyrics_offset = 0  # ms, adjust if lyrics are out of sync
-
-# Color theme
-[ui.colors]
-primary = "#FF8800"
-secondary = "#00AAFF"
-background = "#1A1A1A"
-foreground = "#FFFFFF"
-accent = "#00FF88"
-
-[lyrics]
-# Lyrics settings
-auto_download = true
-save_to_file = true
-cache_duration = 2592000  # 30 days in seconds
-
-# Lyrics provider priority (first to last)
-providers = [
-    "local",
-    "apple_music",
-    "netease",
-    "musixmatch",
-    "genius"
-]
-
-[lyrics.api]
-# API Keys (if needed)
-# Get Musixmatch API key from: https://developer.musixmatch.com/
-musixmatch_api_key = ""
-# Get Genius access token from: https://genius.com/api-clients
-genius_access_token = ""
-
+# ============================================================================
+# ARTWORK SETTINGS
+# ============================================================================
 [artwork]
-# Album artwork settings
-auto_download = true
-cache_enabled = true
-cache_size_limit = 500  # MB
-image_quality = "high"  # low, medium, high
+# Enable/disable album artwork display
+enabled = true
 
-[keybindings]
-# Use default keybindings (recommended)
-useDefaultKeyBindings = true
+# Maximum number of artworks to cache (LRU eviction)
+cache_size = 100
 
-# Custom keybindings
-[keybindings.custom]
-# Playback control
-play_pause = "space"
-next = ["]", "n"]
-previous = ["[", "p"]
-forward_five = "v"
-forward_ten = "V"
-backward_one = "x"
-backward_five = "X"
+# Artwork rendering mode
+# Options: "auto", "ascii", "blocks", "truecolor"
+# "auto" = automatically detect best mode for your terminal
+mode = "auto"
 
-# Volume control
-volume_up = ["+", "="]
-volume_down = ["-", "_"]
-mute = "m"
+# Mosaic mode: Apply pixelated/mosaic effect to artwork
+# Creates a retro 8-bit aesthetic
+mosaic = true
 
-# Navigation
-move_up = ["k", "up"]
-move_down = ["j", "down"]
-move_left = ["h", "left"]
-move_right = ["l", "right"]
-page_up = "ctrl+u"
-page_down = "ctrl+d"
-go_to_top = "g"
-go_to_bottom = "G"
+# ============================================================================
+# UI SETTINGS
+# ============================================================================
+[ui]
+# Color theme
+# Options: "default" (AMBER VFD - orange retro)
+#          "green_vfd", "cyan_vfd", "red_alert"
+#          "modern" (light theme), "clean" (terminal native colors)
+# Note: You can also switch themes in real-time with 't' key
+color_theme = "default"
 
-# Features
-search = ["/", "ctrl+f"]
-toggle_lyrics = "l"
-toggle_album_art = "a"
-help = "?"
-quit = ["q", "ctrl+c"]
-refresh = "r"
+# Show help overlay on application start
+show_help_on_start = true
 
-# Global hotkeys (macOS-wide, requires accessibility permission)
-[keybindings.global]
-# Leave empty to disable global hotkeys
-# Example: 
-# play_pause = "cmd+shift+space"
-# next = "cmd+shift+right"
-# previous = "cmd+shift+left"
+# ============================================================================
+# FUTURE FEATURES (Phase 4+) - NOT YET IMPLEMENTED
+# ============================================================================
+# The following sections are PLANNED but do not currently work.
+# Uncommenting them will have no effect until future phases are completed.
 
-[plugins]
-# Plugin system
-enabled = []  # e.g., ["spotify", "lastfm"]
+# [player]
+# # Default media player
+# default_player = "apple_music"  # [FUTURE] apple_music, spotify, vlc
+# auto_start_player = true
+# default_volume = 50
+# remember_volume = true
 
-# Spotify plugin configuration
-[plugins.spotify]
-client_id = ""
-client_secret = ""
-redirect_uri = "http://localhost:8888/callback"
+# [lyrics]
+# # Lyrics provider priority (currently: local → netease → lrclib)
+# auto_download = true
+# save_to_file = true
+# cache_duration = 2592000  # 30 days in seconds
+# 
+# # [FUTURE] Additional providers (musixmatch, genius)
+# providers = ["local", "netease", "lrclib", "musixmatch", "genius"]
+# 
+# [lyrics.api]
+# musixmatch_api_key = ""  # [FUTURE]
+# genius_access_token = ""  # [FUTURE]
 
-# Last.fm plugin configuration
-[plugins.lastfm]
-api_key = ""
-api_secret = ""
-scrobble_enabled = true
-scrobble_threshold = 0.5  # Scrobble after 50% of track played
+# [keybindings]
+# # [FUTURE] Custom keybinding system
+# use_default = true
+# 
+# [keybindings.custom]
+# play_pause = "space"
+# next = ["]", "n"]
+# previous = ["[", "p"]
 
-# VLC plugin configuration
-[plugins.vlc]
-http_host = "localhost"
-http_port = 8080
-http_password = ""
+# [plugins]
+# # [FUTURE] Plugin system (Phase 5)
+# enabled = []  # e.g., ["spotify", "lastfm"]
+# 
+# [plugins.spotify]
+# client_id = ""
+# client_secret = ""
+# 
+# [plugins.lastfm]
+# api_key = ""
+# scrobble_enabled = true
 
-[advanced]
-# Advanced settings
-enable_mpris = false  # Linux only
-enable_notifications = true
-notification_style = "system"  # system, inline, off
-update_check = true
-update_check_interval = 86400  # seconds (24 hours)
+# [advanced]
+# # [FUTURE] Performance tuning
+# ui_refresh_rate = 60  # Hz
+# max_cache_items = 1000
+# debug_mode = false
 
-# Performance tuning
-ui_refresh_rate = 60  # Hz
-max_cache_items = 1000
-worker_threads = 4
-
-# Debug
-debug_mode = false
-profile_mode = false
+# ============================================================================
+# END OF CONFIGURATION
+# ============================================================================
+# For more information, see:
+# - README.md - User guide and feature documentation
+# - PROJECT_SPEC.md - Complete technical specification
+# - https://github.com/yourusername/amcli

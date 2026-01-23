@@ -38,7 +38,14 @@
 #### 🎨 视觉体验
 - ASCII/Unicode/真彩色专辑封面
 - **非阻塞后台加载**：封面下载与处理不再引起 UI 冻结
-- 可自定义的颜色主题
+- **6 种主题可选**：
+  - `AMBER VFD` (默认橙色复古风)
+  - `GREEN VFD` (绿色终端风格)
+  - `CYAN VFD` (青色电子风格)
+  - `RED ALERT` (红色警告风格)
+  - `MODERN` (现代浅色主题)
+  - `CLEAN` (终端原生配色)
+- **马赛克模式**：可选的像素化艺术效果
 - 响应式布局
 - 流畅的动画效果
 
@@ -57,6 +64,15 @@
 - 搜索功能
 - macOS 系统集成（通知、Now Playing、媒体键）
 - 插件支持（Spotify, VLC, Last.fm）
+
+#### ⚙️ 配置与个性化
+- **多语言界面**：English / Japanese (日本語)
+- **设置菜单** (按 `s` 键)：
+  - 语言切换 (English ↔ Japanese)
+  - 主题选择 (6 种主题)
+  - 马赛克模式开关
+- **配置文件**：`~/.config/amcli/config.toml`
+- **主题实时切换**：按 `t` 键循环切换 6 种主题
 
 ### 🚀 快速开始
 
@@ -85,19 +101,41 @@ amcli --help
 amcli --config ~/.config/amcli/config.toml
 ```
 
+#### 配置
+
+配置文件位置：`~/.config/amcli/config.toml`（首次运行时自动创建）
+
+可用配置：
+```toml
+[general]
+language = "en"  # "en" (English) 或 "jp" (Japanese)
+
+[artwork]
+enabled = true
+cache_size = 100  # 最大缓存封面数
+mode = "auto"     # auto, ascii, blocks, truecolor
+mosaic = true     # 马赛克像素化效果
+
+[ui]
+color_theme = "default"  # 主题名称
+show_help_on_start = true
+```
+
 ### ⌨️ 快捷键
 
-| 功能 | 快捷键 |
-|------|--------|
-| 播放/暂停 | `Space` |
-| 下一曲 | `]` |
-| 上一曲 | `[` |
-| 音量+ | `=` / `+` |
-| 音量- | `-` / `_` |
-| 向上/下导航 | `k` / `j` 或 `↑` / `↓` |
-| 搜索 | `/` |
-| 帮助 | `?` |
-| 退出 | `q` |
+| 功能 | 快捷键 | 说明 |
+|------|--------|------|
+| 播放/暂停 | `Space` | |
+| 下一曲 | `]` | |
+| 上一曲 | `[` | |
+| 音量+ | `=` / `+` | |
+| 音量- | `-` / `_` | |
+| 向上/下导航 | `k` / `j` 或 `↑` / `↓` | |
+| 搜索 | `/` | |
+| 帮助 | `?` | |
+| **主题切换** | `t` | 循环切换 6 种主题 |
+| **设置** | `s` | 语言/主题/马赛克 |
+| 退出 | `q` | |
 
 完整快捷键列表请查看 [PROJECT_SPEC.md](PROJECT_SPEC.md#键盘快捷键系统--keyboard-shortcuts)
 
@@ -169,7 +207,14 @@ amcli --config ~/.config/amcli/config.toml
 #### 🎨 Visual Experience
 - ASCII/Unicode/TrueColor album artwork
 - **Non-blocking background loading**: Artwork downloading and processing no longer freezes the UI
-- Customizable color themes
+- **6 Themes Available**:
+  - `AMBER VFD` (Default orange retro style)
+  - `GREEN VFD` (Green terminal aesthetic)
+  - `CYAN VFD` (Cyan electronic style)
+  - `RED ALERT` (Red alert theme)
+  - `MODERN` (Modern light theme)
+  - `CLEAN` (Terminal native colors)
+- **Mosaic Mode**: Optional pixelated artwork effect
 - Responsive layout
 - Smooth animations
 
@@ -188,6 +233,15 @@ amcli --config ~/.config/amcli/config.toml
 - Search functionality
 - macOS system integration (notifications, Now Playing, media keys)
 - Plugin support (Spotify, VLC, Last.fm)
+
+#### ⚙️ Configuration & Customization
+- **Multi-language UI**: English / Japanese (日本語)
+- **Settings Menu** (Press `s` key):
+  - Language toggle (English ↔ Japanese)
+  - Theme selection (6 themes)
+  - Mosaic mode toggle
+- **Configuration file**: `~/.config/amcli/config.toml`
+- **Live theme switching**: Press `t` to cycle through 6 themes
 
 ### 🚀 Quick Start
 
@@ -216,19 +270,41 @@ amcli --help
 amcli --config ~/.config/amcli/config.toml
 ```
 
+#### Configuration
+
+Config file location: `~/.config/amcli/config.toml` (auto-created on first run)
+
+Available settings:
+```toml
+[general]
+language = "en"  # "en" (English) or "jp" (Japanese)
+
+[artwork]
+enabled = true
+cache_size = 100  # Max cached artworks
+mode = "auto"     # auto, ascii, blocks, truecolor
+mosaic = true     # Mosaic pixelated effect
+
+[ui]
+color_theme = "default"  # Theme name
+show_help_on_start = true
+```
+
 ### ⌨️ Keybindings
 
-| Action | Key |
-|--------|-----|
-| Play/Pause | `Space` |
-| Next Track | `]` |
-| Previous Track | `[` |
-| Volume Up | `=` / `+` |
-| Volume Down | `-` / `_` |
-| Navigate Up/Down | `k` / `j` or `↑` / `↓` |
-| Search | `/` |
-| Help | `?` |
-| Quit | `q` |
+| Action | Key | Description |
+|--------|-----|-------------|
+| Play/Pause | `Space` | |
+| Next Track | `]` | |
+| Previous Track | `[` | |
+| Volume Up | `=` / `+` | |
+| Volume Down | `-` / `_` | |
+| Navigate Up/Down | `k` / `j` or `↑` / `↓` | |
+| Search | `/` | |
+| **Theme Switch** | `t` | Cycle through 6 themes |
+| **Settings** | `s` | Language/Theme/Mosaic |
+| Help | `?` | |
+| Quit | `q` | |
 
 See [PROJECT_SPEC.md](PROJECT_SPEC.md#键盘快捷键系统--keyboard-shortcuts) for complete keybindings.
 
