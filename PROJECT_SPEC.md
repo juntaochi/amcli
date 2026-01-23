@@ -219,78 +219,24 @@ impl MediaPlayer for AppleMusicController {
 - 🔊 音量控制 (Volume: 0-100)
 - ⏩ 快进/快退 (Seek: +/-seconds)
 
-### 2. Ratatui TUI 界面 / Ratatui UI Interface
+### 4.2 核心状态机 (App State)
 
-```rust
-// src/ui/mod.rs
-use anyhow::Result;
-use ratatui::{
-    backend::Backend,
-    layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Gauge, Paragraph},
-    Frame,
-};
+| 状态字段 | 类型 | 说明 |
+|----------|------|------|
+| `player` | `Box<dyn MediaPlayer>` | 播放器抽象接口 (Apple Music/Spotify) |
+| `current_track` | `Option<Track>` | 当前播放曲目元数据 |
+| `artwork_task` | `Option<JoinHandle<Result<DynamicImage>>>` | 封面后台下载与处理任务 |
+| `is_loading_artwork` | `bool` | 封面加载状态标识 |
+| `current_lyrics` | `Option<Lyrics>` | 当前同步歌词数据 |
 
-use crate::player::{MediaPlayer, apple_music::AppleMusicController};
+### 4.3 异步工作流 (Async Workflow)
 
-pub struct App {
-    player: Box<dyn MediaPlayer>,
-    current_track: Option<Track>,
-    // Add more state as needed
-}
-
-impl App {
-    pub async fn new() -> Result<Self> {
-        Ok(Self {
-            player: Box::new(AppleMusicController::new()),
-            current_track: None,
-        })
-    }
-
-    pub async fn update(&mut self) -> Result<()> {
-        self.current_track = self.player.get_current_track().await?;
-        Ok(())
-    }
-}
-
-pub fn draw<B: Backend>(f: &mut Frame<B>, app: &App) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(2)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(10),
-            Constraint::Length(3),
-        ])
-        .split(f.size());
-
-    // Title
-    let title = Paragraph::new("AMCLI - Apple Music Controller")
-        .style(Style::default().fg(Color::Cyan))
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL));
-    f.render_widget(title, chunks[0]);
-
-    // Main content
-    let content = if let Some(track) = &app.current_track {
-        format!("Now Playing:\n{} - {}", track.name, track.artist)
-    } else {
-        "No track playing".to_string()
-    };
-    
-    let main_block = Paragraph::new(content)
-        .block(Block::default().title("Now Playing").borders(Borders::ALL));
-    f.render_widget(main_block, chunks[1]);
-
-    // Status bar
-    let status = Paragraph::new("[Space] Play/Pause | [[] Prev | []] Next | [q] Quit")
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL));
-    f.render_widget(status, chunks[2]);
-}
-```
+1. **事件循环**: 每 50ms 轮询一次输入事件，确保 UI 响应。
+2. **状态同步**: 每 500ms 同步一次播放器状态（进度、音量、曲目切换）。
+3. **资源加载**:
+   - **歌词**: 切换曲目时触发异步查询。
+   - **封面**: 切换曲目或主题时，派发后台任务进行非阻塞加载，主线程轮询结果。
+   - **渲染**: 主线程仅负责画布绘制，不进行任何 I/O 操作。
 
 #### 主界面布局示例
 

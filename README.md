@@ -37,15 +37,19 @@
 
 #### 🎨 视觉体验
 - ASCII/Unicode/真彩色专辑封面
+- **非阻塞后台加载**：封面下载与处理不再引起 UI 冻结
 - 可自定义的颜色主题
 - 响应式布局
 - 流畅的动画效果
 
-#### 📝 歌词功能
-- 实时同步 LRC 歌词
-- 多种显示模式（滚动/卡拉OK/全文）
-- 多个歌词源（Netease, Musixmatch, Genius）
-- 本地歌词文件支持
+#### 📝 歌词功能 (Phase 3 - 已完成)
+- **实时同步显示**：毫秒级精度的 LRC 歌词同步
+- **多源智能获取**：
+  - 本地优先：自动搜索 `~/Music/Lyrics` 下的 `.lrc` 文件
+  - 在线备选：网易云音乐 API 自动搜索匹配
+  - LRU 缓存：加速重复查询
+- **自动滚动视图**：当前歌词行始终居中高亮
+- **完整 LRC 解析**：支持多时间戳、偏移量调整
 
 #### 🔧 高级功能
 - 播放列表管理
@@ -57,7 +61,7 @@
 ### 🚀 快速开始
 
 > [!TIP]
-> **项目状态：** 阶段 1 (核心基础) 已完成。目前正在进行阶段 2。
+> **项目状态：** 阶段 1-3 已完成（核心基础 + 专辑封面 + 歌词系统）。Phase 3 实现了完整的在线/本地歌词集成。
 
 #### 安装
 
@@ -100,8 +104,9 @@ amcli --config ~/.config/amcli/config.toml
 ### 📋 项目文档
 
 - **[PROJECT_SPEC.md](PROJECT_SPEC.md)** - 完整的项目规格说明（69KB，包含详细的技术架构、功能设计、实现路线图）
-- **[ROADMAP.md](ROADMAP.md)** - 开发路线图和里程碑（即将推出）
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** - 贡献指南（即将推出）
+- **[LYRICS.md](LYRICS.md)** - 歌词系统技术文档（LRC 解析、在线源集成、同步算法）
+- **[TODO.md](TODO.md)** - 开发任务清单
+- **[AGENTS.md](AGENTS.md)** - AI 开发协作指南
 
 ### 🏗️ 开发路线图
 
@@ -163,15 +168,19 @@ amcli --config ~/.config/amcli/config.toml
 
 #### 🎨 Visual Experience
 - ASCII/Unicode/TrueColor album artwork
+- **Non-blocking background loading**: Artwork downloading and processing no longer freezes the UI
 - Customizable color themes
 - Responsive layout
 - Smooth animations
 
-#### 📝 Lyrics Features
-- Real-time LRC lyrics synchronization
-- Multiple display modes (scroll/karaoke/full)
-- Multiple lyrics sources (Netease, Musixmatch, Genius)
-- Local lyrics file support
+#### 📝 Lyrics Features (Phase 3 - Completed)
+- **Real-time Synchronization**: Millisecond-precision LRC lyrics sync
+- **Multi-source Smart Fetching**:
+  - Local Priority: Auto-search `~/Music/Lyrics` for `.lrc` files
+  - Online Fallback: Netease Cloud Music API auto-matching
+  - LRU Caching: Accelerated repeated queries
+- **Auto-scrolling View**: Current lyric line always centered and highlighted
+- **Full LRC Parsing**: Supports multiple timestamps and offset adjustments
 
 #### 🔧 Advanced Features
 - Playlist management
@@ -183,7 +192,7 @@ amcli --config ~/.config/amcli/config.toml
 ### 🚀 Quick Start
 
 > [!TIP]
-> **Project Status:** Phase 1 (Core Foundation) is complete. Phase 2 is in progress.
+> **Project Status:** Phase 1-3 completed (Core Foundation + Album Artwork + Lyrics System). Phase 3 implemented full online/local lyrics integration.
 
 #### Installation
 
@@ -226,8 +235,9 @@ See [PROJECT_SPEC.md](PROJECT_SPEC.md#键盘快捷键系统--keyboard-shortcuts)
 ### 📋 Documentation
 
 - **[PROJECT_SPEC.md](PROJECT_SPEC.md)** - Complete project specification (69KB, includes detailed technical architecture, feature design, implementation roadmap)
-- **[ROADMAP.md](ROADMAP.md)** - Development roadmap and milestones (Coming soon)
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines (Coming soon)
+- **[LYRICS.md](LYRICS.md)** - Lyrics system technical documentation (LRC parsing, online source integration, sync algorithms)
+- **[TODO.md](TODO.md)** - Development task checklist
+- **[AGENTS.md](AGENTS.md)** - AI development collaboration guide
 
 ### 🏗️ Development Roadmap
 

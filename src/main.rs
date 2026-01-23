@@ -63,51 +63,76 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
+    let mut last_update = std::time::Instant::now();
+    let update_interval = std::time::Duration::from_millis(500);
+
     loop {
         terminal.draw(|f| ui::draw(f, &mut app))?;
 
-        if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
-                match key.code {
-                    // Quit
-                    KeyCode::Char('q') => return Ok(()),
+        if event::poll(std::time::Duration::from_millis(50))? {
+            match event::read()? {
+                Event::Key(key) => {
+                    // Check for Ctrl+C first
+                    if key.code == KeyCode::Char('c') 
+                        && key.modifiers.contains(event::KeyModifiers::CONTROL) 
+                    {
+                        return Ok(());
+                    }
 
-                    // Playback control
-                    KeyCode::Char(' ') => app.toggle_playback().await?,
-                    KeyCode::Char(']') => app.next_track().await?,
-                    KeyCode::Char('[') => app.previous_track().await?,
-
-                    // Volume control
-                    KeyCode::Char('=') | KeyCode::Char('+') => app.volume_up().await?,
-                    KeyCode::Char('-') | KeyCode::Char('_') => app.volume_down().await?,
-                    KeyCode::Char('m') => app.toggle_mute().await?,
-
-                    // Seek control
-                    KeyCode::Right => app.seek_forward().await?,
-                    KeyCode::Left => app.seek_backward().await?,
-                    KeyCode::Char('.') => app.seek_forward().await?,
-                    KeyCode::Char(',') => app.seek_backward().await?,
-
-                    // Navigation (for future views)
-                    KeyCode::Char('k') | KeyCode::Up => app.navigate_up(),
-                    KeyCode::Char('j') | KeyCode::Down => app.navigate_down(),
-                    KeyCode::Char('h') => app.navigate_left(),
-                    KeyCode::Char('l') => app.navigate_right(),
-
-                    // Mode toggles
-                    KeyCode::Char('s') => app.toggle_shuffle().await?,
-                    KeyCode::Char('r') => app.cycle_repeat().await?,
-                    KeyCode::Char('t') => app.next_theme().await?,
-
-                    // Help
-                    KeyCode::Char('?') => app.toggle_help(),
-
-                    _ => {}
+                    // Handle settings menu navigation if open
+                    if app.is_settings_open() {
+                        match key.code {
+                            KeyCode::Esc | KeyCode::Char('s') | KeyCode::Char('S') => {
+                                app.close_settings();
+                            }
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                app.settings_navigate_up();
+                            }
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                app.settings_navigate_down();
+                            }
+                            KeyCode::Enter | KeyCode::Char(' ') => {
+                                app.settings_select().await?;
+                            }
+                            _ => {}
+                        }
+                    } else {
+                        // Normal app controls when settings not open
+                        match key.code {
+                            KeyCode::Char('q') => return Ok(()),
+                            KeyCode::Char('s') | KeyCode::Char('S') => app.toggle_settings_menu(),
+                            KeyCode::Char(' ') => app.toggle_playback().await?,
+                            KeyCode::Char(']') => app.next_track().await?,
+                            KeyCode::Char('[') => app.previous_track().await?,
+                            KeyCode::Char('=') | KeyCode::Char('+') => app.volume_up().await?,
+                            KeyCode::Char('-') | KeyCode::Char('_') => app.volume_down().await?,
+                            KeyCode::Char('m') => app.toggle_mute().await?,
+                            KeyCode::Right => app.seek_forward().await?,
+                            KeyCode::Left => app.seek_backward().await?,
+                            KeyCode::Char('.') => app.seek_forward().await?,
+                            KeyCode::Char(',') => app.seek_backward().await?,
+                            KeyCode::Char('k') | KeyCode::Up => app.navigate_up(),
+                            KeyCode::Char('j') | KeyCode::Down => app.navigate_down(),
+                            KeyCode::Char('h') => app.navigate_left(),
+                            KeyCode::Char('l') => app.navigate_right(),
+                            KeyCode::Char('r') => app.cycle_repeat().await?,
+                            KeyCode::Char('t') => app.next_theme().await?,
+                            KeyCode::Char('?') => app.toggle_help(),
+                            _ => {}
+                        }
+                    }
                 }
+                Event::Mouse(_mouse) => {
+                    // Mouse support placeholder - we'll implement detailed handling next
+                    // For now, we just consume the event
+                }
+                _ => {}
             }
         }
 
-        // Update app state
-        app.update().await?;
+        if last_update.elapsed() >= update_interval {
+            app.update().await?;
+            last_update = std::time::Instant::now();
+        }
     }
 }
