@@ -149,9 +149,9 @@ show_help_on_start = true
 | 上一曲 | `[` | |
 | 音量+ | `=` / `+` | |
 | 音量- | `-` / `_` | |
-| 向上/下导航 | `k` / `j` 或 `↑` / `↓` | |
-| 搜索 | `/` | |
-| 帮助 | `?` | |
+| 向上/下导航(W.I.P) | `k` / `j` 或 `↑` / `↓` | |
+| 搜索(W.I.P) | `/` | |
+| 帮助(W.I.P) | `?` | |
 | **主题切换** | `t` | 循环切换 6 种主题 |
 | **设置** | `s` | 语言/主题/马赛克 |
 | 退出 | `q` | |
@@ -162,8 +162,6 @@ show_help_on_start = true
 
 - **[PROJECT_SPEC.md](PROJECT_SPEC.md)** - 完整的项目规格说明（69KB，包含详细的技术架构、功能设计、实现路线图）
 - **[LYRICS.md](LYRICS.md)** - 歌词系统技术文档（LRC 解析、在线源集成、同步算法）
-- **[TODO.md](TODO.md)** - 开发任务清单
-- **[AGENTS.md](AGENTS.md)** - AI 开发协作指南
 
 ### 🏗️ 开发路线图
 
@@ -337,11 +335,11 @@ show_help_on_start = true
 | Previous Track | `[` | |
 | Volume Up | `=` / `+` | |
 | Volume Down | `-` / `_` | |
-| Navigate Up/Down | `k` / `j` or `↑` / `↓` | |
-| Search | `/` | |
+| Navigate Up/Down(W.I.P) | `k` / `j` or `↑` / `↓` | |
+| Search(W.I.P) | `/` | |
 | **Theme Switch** | `t` | Cycle through 6 themes |
 | **Settings** | `s` | Language/Theme/Mosaic |
-| Help | `?` | |
+| Help(W.I.P) | `?` | |
 | Quit | `q` | |
 
 See [PROJECT_SPEC.md](PROJECT_SPEC.md#键盘快捷键系统--keyboard-shortcuts) for complete keybindings.
