@@ -9,10 +9,10 @@ class Amcli < Formula
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/juntaochi/amcli/releases/download/v0.1.0/amcli-v0.1.0-arm64-apple-darwin.tar.gz"
-      sha256 "REPLACE_WITH_ARM64_SHA256"
+      sha256 "d63737ba3669d9b73baf95d7b2378f8d6d493c4e42995cd0d87abf2dc86b618e"
     else
       url "https://github.com/juntaochi/amcli/releases/download/v0.1.0/amcli-v0.1.0-x86_64-apple-darwin.tar.gz"
-      sha256 "REPLACE_WITH_X86_64_SHA256"
+      sha256 "cb7e0f14e002fa976717fadb31483047cc4075de24d1baaacc89343f3c03c574"
     end
   end
 
