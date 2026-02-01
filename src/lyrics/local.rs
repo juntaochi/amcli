@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use crate::lyrics::LyricsProvider;
+use std::path::PathBuf;
 
 pub struct LocalProvider;
 
