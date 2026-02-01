@@ -1,5 +1,5 @@
-use anyhow::Result;
 use crate::player::Track;
+use anyhow::Result;
 use std::time::Duration;
 
 pub mod local;
@@ -9,6 +9,7 @@ pub mod netease;
 #[derive(Clone, Debug)]
 pub struct LyricLine {
     pub text: String,
+    #[allow(dead_code)]
     pub timestamp: Duration,
 }
 
@@ -33,8 +34,7 @@ impl LyricsManager {
         Self
     }
 
-    pub fn add_provider(&mut self, _provider: Box<dyn LyricsProvider>) {
-    }
+    pub fn add_provider(&mut self, _provider: Box<dyn LyricsProvider>) {}
 
     pub async fn get_lyrics(&self, _track: &Track) -> Result<Option<Lyrics>> {
         Ok(None)
