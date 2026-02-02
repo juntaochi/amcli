@@ -1,8 +1,8 @@
 pub mod local;
 pub mod lrclib;
 pub mod netease;
-use anyhow::Result;
 use crate::player::Track;
+use anyhow::Result;
 use std::time::Duration;
 
 #[derive(Clone, Debug)]

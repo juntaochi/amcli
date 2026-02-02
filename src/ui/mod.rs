@@ -154,13 +154,13 @@ impl App {
     ) -> Result<Self> {
         let volume = 50;
         let cache_dir = dirs::cache_dir()
-            .unwrap_or_else(|| std::env::temp_dir())
+            .unwrap_or_else(std::env::temp_dir)
             .join("amcli/artwork");
 
         tokio::fs::create_dir_all(&cache_dir).await.ok();
 
         let lyrics_dir = dirs::home_dir()
-            .unwrap_or_else(|| std::env::temp_dir())
+            .unwrap_or_else(std::env::temp_dir)
             .join("Music/Lyrics");
 
         let mut lyrics_manager = LyricsManager::new(20);
@@ -375,10 +375,8 @@ impl App {
     }
 
     pub async fn update(&mut self) -> Result<()> {
-        let (track_result, volume_result) = tokio::join!(
-            self.player.get_current_track(),
-            self.player.get_volume()
-        );
+        let (track_result, volume_result) =
+            tokio::join!(self.player.get_current_track(), self.player.get_volume());
 
         let new_track = track_result.ok().flatten();
         self.volume = volume_result.unwrap_or(self.volume);
@@ -436,7 +434,7 @@ impl App {
                     task.abort();
                 }
 
-                let task = tokio::spawn(async move {
+                let task: JoinHandle<Result<DynamicImage>> = tokio::spawn(async move {
                     // For modern themes (non-retro), swap dark/light to fix color inversion
                     if is_retro {
                         manager
@@ -755,7 +753,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             vec!["TRACK TITLE", "ARTIST", "ALBUM REFERENCE"]
         };
 
-        let values = vec![
+        let values = [
             track.name.to_uppercase(),
             track.artist.to_uppercase(),
             track.album.to_uppercase(),
@@ -775,7 +773,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .split(metadata_area);
 
-            let mid = (items_count + 1) / 2;
+            let mid = (items_count + 1).div_ceil(2);
             let col_width = col_layout[0].width.saturating_sub(6) as usize;
 
             for col in 0..2 {
@@ -790,11 +788,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                             Span::raw("────────────────────────").fg(theme.dim)
                         ]));
                     }
-                } else {
-                    if theme.is_retro {
-                        lines.push(Line::from(""));
-                        lines.push(Line::from(""));
-                    }
+                } else if theme.is_retro {
+                    lines.push(Line::from(""));
+                    lines.push(Line::from(""));
                 }
 
                 for i in start..end {
