@@ -474,7 +474,7 @@ impl App {
             if task.is_finished() {
                 if let Some(task) = self.artwork_task.take() {
                     if let Ok(Ok(img)) = task.await {
-                        self.artwork_protocol = Some(self.artwork_converter.create_protocol(img));
+                        self.artwork_protocol = self.artwork_converter.create_protocol(img);
                     }
                 }
                 self.is_loading_artwork = false;
@@ -773,7 +773,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .split(metadata_area);
 
-            let mid = (items_count + 1).div_ceil(2);
+            let mid = (items_count + 1) / 2;
             let col_width = col_layout[0].width.saturating_sub(6) as usize;
 
             for col in 0..2 {
