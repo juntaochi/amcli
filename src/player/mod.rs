@@ -50,5 +50,5 @@ pub trait MediaPlayer: Send + Sync {
     async fn seek(&self, seconds: i32) -> Result<()>;
     async fn set_shuffle(&self, enabled: bool) -> Result<()>;
     async fn set_repeat(&self, mode: RepeatMode) -> Result<()>;
-    async fn get_artwork_url(&self) -> Result<Option<String>>;
+    async fn get_artwork_url(&self, track: &Track) -> Result<Option<String>>;
 }
