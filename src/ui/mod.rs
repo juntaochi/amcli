@@ -375,15 +375,19 @@ impl App {
     }
 
     pub async fn update(&mut self) -> Result<()> {
-        let (track_result, volume_result, artwork_result) = tokio::join!(
+        let (track_result, volume_result) = tokio::join!(
             self.player.get_current_track(),
-            self.player.get_volume(),
-            self.player.get_artwork_url()
+            self.player.get_volume()
         );
 
         let new_track = track_result.ok().flatten();
         self.volume = volume_result.unwrap_or(self.volume);
-        let artwork_url = artwork_result.ok().flatten();
+
+        let artwork_url = if let Some(ref track) = new_track {
+            self.player.get_artwork_url(track).await.ok().flatten()
+        } else {
+            None
+        };
 
         let track_changed = match (&self.current_track, &new_track) {
             (Some(c), Some(n)) => c.name != n.name || c.artist != n.artist,
@@ -1080,7 +1084,7 @@ mod tests {
         async fn set_repeat(&self, _mode: RepeatMode) -> Result<()> {
             Ok(())
         }
-        async fn get_artwork_url(&self) -> Result<Option<String>> {
+        async fn get_artwork_url(&self, _track: &Track) -> Result<Option<String>> {
             Ok(Some("http://example.com/artwork.jpg".into()))
         }
     }
