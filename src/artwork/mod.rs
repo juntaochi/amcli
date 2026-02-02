@@ -1,8 +1,8 @@
 pub mod converter;
-use std::path::PathBuf;
+use anyhow::Result;
 use image::DynamicImage;
 use ratatui::style::Color;
-use anyhow::Result;
+use std::path::PathBuf;
 
 #[derive(Clone)]
 pub struct ArtworkManager;

@@ -10,9 +10,8 @@ impl ArtworkConverter {
         Ok(Self)
     }
 
-    pub fn create_protocol(&self, _img: DynamicImage) -> StatefulProtocol {
-        // We panic here because we can't easily construct StatefulProtocol in a stub without more context/dependencies setup.
-        // If tests fail, we will revisit.
-        todo!("Stub implementation")
+    pub fn create_protocol(&self, _img: DynamicImage) -> Option<StatefulProtocol> {
+        // Stub implementation: return None to avoid panic
+        None
     }
 }

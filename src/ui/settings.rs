@@ -115,10 +115,8 @@ impl SettingsMenu {
             })
             .unwrap_or(true);
 
-        if let Some(current_item) = self.items.get(self.selected_index) {
-            if let SettingsItem::Mosaic { .. } = current_item {
-                return !album_enabled;
-            }
+        if let Some(SettingsItem::Mosaic { .. }) = self.items.get(self.selected_index) {
+            return !album_enabled;
         }
         false
     }
