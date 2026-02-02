@@ -50,8 +50,8 @@ config.toml
 /tmp/
 logs/
 cache/
-artwork/
-lyrics/
+/artwork/
+/lyrics/
 TODO.md
 
 # AI-related
