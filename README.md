@@ -12,6 +12,16 @@
 
 </div>
 
+<div align="center">
+  <img src="assets/screenshot_1.png" width="30%" />
+  <img src="assets/screenshot_2.png" width="30%" />
+  <img src="assets/screenshot_3.png" width="30%" />
+  <img src="assets/screenshot_4.png" width="30%" />
+  <img src="assets/screenshot_5.png" width="30%" />
+  <img src="assets/screenshot_6.png" width="30%" />
+  <img src="assets/screenshot_7.png" width="30%" />
+</div>
+
 ---
 
 ## 中文

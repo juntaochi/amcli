@@ -1,0 +1,88 @@
+AMCLI v0.1.0 RELEASE STATUS
+===========================
+Last Updated: 2026-01-24 03:10 Bangkok Time
+AUTOMATION COMPLETED: 19/23 tasks (83%)
+========================================
+✅ ALL AUTOMATED TASKS COMPLETE
+✅ Release infrastructure ready
+✅ Binary built and packaged
+✅ Homebrew formula prepared
+✅ Twitter drafts created
+✅ Documentation complete
+AWAITING USER ACTION: 4 tasks
+==============================
+The release is ready to complete. All preparation is done.
+You just need to perform 4 quick manual steps (10-15 min total).
+STEP 1: Upload Release Assets
+------------------------------
+Status: WAITING FOR USER
+Action: Open https://github.com/juntaochi/amcli/releases/tag/v0.1.0
+        Click "Edit release"
+        Drag and drop these 2 files:
+        - /tmp/amcli-v0.1.0-arm64-apple-darwin.tar.gz
+        - /tmp/amcli-v0.1.0-arm64-apple-darwin.tar.gz.sha256
+        Click "Update release"
+STEP 2: Create homebrew-tap Repository
+---------------------------------------
+Status: WAITING FOR USER
+Action: cd ~/homebrew-tap
+        gh repo create homebrew-tap --public --description "Homebrew formulae for juntaochi's projects"
+        git remote add origin https://github.com/juntaochi/homebrew-tap.git
+        git push -u origin main
+STEP 3: Test Installation
+--------------------------
+Status: WAITING FOR USER
+Action: brew tap juntaochi/tap
+        brew install amcli
+        amcli --version
+        (Should show: amcli 0.1.0)
+STEP 4: Post Announcement
+--------------------------
+Status: WAITING FOR USER  
+Action: Review: cat ~/Repos/amcli/TWITTER_ANNOUNCEMENT.md
+        Choose Option 2 (5-tweet thread) - RECOMMENDED
+        Post during: 9-10 AM or 1-2 PM PST
+        Include: Screenshot + #RustLang #macOS #TUI hashtags
+QUICK COMMAND REFERENCE
+=======================
+All commands ready to copy-paste:
+# Step 1 (Browser)
+open https://github.com/juntaochi/amcli/releases/tag/v0.1.0
+# Step 2
+cd ~/homebrew-tap && \
+gh repo create homebrew-tap --public --description "Homebrew formulae for juntaochi's projects" && \
+git remote add origin https://github.com/juntaochi/homebrew-tap.git && \
+git push -u origin main
+# Step 3
+brew tap juntaochi/tap && \
+brew install amcli && \
+amcli --version
+# Step 4
+cat ~/Repos/amcli/TWITTER_ANNOUNCEMENT.md
+DETAILED INSTRUCTIONS
+=====================
+See: ~/RELEASE_FINAL_STEPS.md
+FILES READY
+===========
+Release Assets:
+  /tmp/amcli-v0.1.0-arm64-apple-darwin.tar.gz (3.5MB)
+  /tmp/amcli-v0.1.0-arm64-apple-darwin.tar.gz.sha256
+  SHA256: 51872491c08d7f18760a13088e6fd3c0162cf79bbb1459a18febf91d9744c74c
+Homebrew:
+  ~/homebrew-tap/Formula/amcli.rb (ready to push)
+  ~/homebrew-tap/README.md (ready to push)
+Marketing:
+  ~/Repos/amcli/TWITTER_ANNOUNCEMENT.md (3 formats, timing tips)
+Scripts:
+  /tmp/upload-release-asset.sh (optional helper)
+LINKS
+=====
+GitHub Release: https://github.com/juntaochi/amcli/releases/tag/v0.1.0
+Main Repo: https://github.com/juntaochi/amcli
+Tag: v0.1.0
+NEXT ACTIONS
+============
+→ Complete the 4 manual steps above
+→ Total estimated time: 10-15 minutes
+→ Then you're done! 🚀
+All automation complete. Ready for your manual completion!

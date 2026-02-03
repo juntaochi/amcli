@@ -1,31 +1,36 @@
-pub mod local;
-pub mod lrclib;
-pub mod netease;
 use crate::player::Track;
 use anyhow::Result;
 use std::time::Duration;
 
+pub mod local;
+pub mod lrclib;
+pub mod netease;
+
+#[derive(Clone, Debug)]
+pub struct LyricLine {
+    pub text: String,
+    #[allow(dead_code)]
+    pub timestamp: Duration,
+}
+
 #[derive(Clone, Debug)]
 pub struct Lyrics {
-    pub lines: Vec<LyricsLine>,
+    pub lines: Vec<LyricLine>,
 }
 
 impl Lyrics {
-    pub fn find_index(&self, _pos: Duration) -> usize {
+    pub fn find_index(&self, _position: Duration) -> usize {
         0
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct LyricsLine {
-    pub text: String,
-}
+pub trait LyricsProvider: Send + Sync {}
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct LyricsManager;
 
 impl LyricsManager {
-    pub fn new(_size: usize) -> Self {
+    pub fn new(_capacity: usize) -> Self {
         Self
     }
 
@@ -35,5 +40,3 @@ impl LyricsManager {
         Ok(None)
     }
 }
-
-pub trait LyricsProvider: Send + Sync {}

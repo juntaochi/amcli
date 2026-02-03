@@ -1,4 +1,4 @@
-use super::LyricsProvider;
+use crate::lyrics::LyricsProvider;
 
 pub struct LrclibProvider;
 
