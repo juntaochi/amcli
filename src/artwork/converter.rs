@@ -2,7 +2,6 @@ use anyhow::Result;
 use image::DynamicImage;
 use ratatui_image::protocol::StatefulProtocol;
 
-#[derive(Clone)]
 pub struct ArtworkConverter;
 
 impl ArtworkConverter {
@@ -10,8 +9,7 @@ impl ArtworkConverter {
         Ok(Self)
     }
 
-    pub fn create_protocol(&self, _img: DynamicImage) -> Option<StatefulProtocol> {
-        // Stub implementation: return None to avoid panic
-        None
+    pub fn create_protocol(&self, _img: DynamicImage) -> StatefulProtocol {
+        unimplemented!("Stubbed ArtworkConverter::create_protocol")
     }
 }

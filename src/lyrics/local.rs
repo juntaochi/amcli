@@ -1,4 +1,4 @@
-use super::LyricsProvider;
+use crate::lyrics::LyricsProvider;
 use std::path::PathBuf;
 
 pub struct LocalProvider;
