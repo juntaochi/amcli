@@ -474,7 +474,7 @@ impl App {
             if task.is_finished() {
                 if let Some(task) = self.artwork_task.take() {
                     if let Ok(Ok(img)) = task.await {
-                        self.artwork_protocol = self.artwork_converter.create_protocol(img);
+                        self.artwork_protocol = Some(self.artwork_converter.create_protocol(img));
                     }
                 }
                 self.is_loading_artwork = false;
