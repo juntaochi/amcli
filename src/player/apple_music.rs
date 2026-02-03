@@ -29,18 +29,23 @@ impl CommandRunner for OsascriptRunner {
 
 pub struct AppleMusicController {
     runner: Box<dyn CommandRunner>,
+    artwork_cache: std::sync::Mutex<Option<(String, Option<String>)>>,
 }
 
 impl AppleMusicController {
     pub fn new() -> Self {
         Self {
             runner: Box::new(OsascriptRunner),
+            artwork_cache: std::sync::Mutex::new(None),
         }
     }
 
     #[cfg(test)]
     pub fn with_runner(runner: Box<dyn CommandRunner>) -> Self {
-        Self { runner }
+        Self {
+            runner,
+            artwork_cache: std::sync::Mutex::new(None),
+        }
     }
 
     async fn execute_script(&self, script: &str) -> Result<String> {
@@ -190,11 +195,17 @@ impl MediaPlayer for AppleMusicController {
         Ok(())
     }
 
-    async fn get_artwork_url(&self) -> Result<Option<String>> {
-        let track = match self.get_current_track().await? {
-            Some(t) => t,
-            None => return Ok(None),
-        };
+    async fn get_artwork_url(&self, track: &Track) -> Result<Option<String>> {
+        let track_key = format!("{}|{}", track.artist, track.name);
+
+        // Check cache
+        if let Ok(cache) = self.artwork_cache.lock() {
+            if let Some((key, url)) = &*cache {
+                if key == &track_key {
+                    return Ok(url.clone());
+                }
+            }
+        }
 
         let query = format!("{} {}", track.artist, track.name);
         let url = format!(
@@ -211,6 +222,11 @@ impl MediaPlayer for AppleMusicController {
         let artwork_url = json["results"][0]["artworkUrl100"]
             .as_str()
             .map(|s| s.replace("100x100bb", "600x600bb"));
+
+        // Update cache
+        if let Ok(mut cache) = self.artwork_cache.lock() {
+            *cache = Some((track_key, artwork_url.clone()));
+        }
 
         Ok(artwork_url)
     }

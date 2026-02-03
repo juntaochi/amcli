@@ -2,9 +2,10 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum Language {
     #[serde(rename = "en")]
+    #[default]
     English,
     #[serde(rename = "jp")]
     Japanese,
@@ -23,12 +24,6 @@ impl Language {
             Language::English => Language::Japanese,
             Language::Japanese => Language::English,
         }
-    }
-}
-
-impl Default for Language {
-    fn default() -> Self {
-        Language::English
     }
 }
 

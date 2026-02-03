@@ -375,15 +375,17 @@ impl App {
     }
 
     pub async fn update(&mut self) -> Result<()> {
-        let (track_result, volume_result, artwork_result) = tokio::join!(
-            self.player.get_current_track(),
-            self.player.get_volume(),
-            self.player.get_artwork_url()
-        );
+        let (track_result, volume_result) =
+            tokio::join!(self.player.get_current_track(), self.player.get_volume());
 
         let new_track = track_result.ok().flatten();
         self.volume = volume_result.unwrap_or(self.volume);
-        let artwork_url = artwork_result.ok().flatten();
+
+        let artwork_url = if let Some(ref track) = new_track {
+            self.player.get_artwork_url(track).await.ok().flatten()
+        } else {
+            None
+        };
 
         let track_changed = match (&self.current_track, &new_track) {
             (Some(c), Some(n)) => c.name != n.name || c.artist != n.artist,
@@ -432,7 +434,7 @@ impl App {
                     task.abort();
                 }
 
-                let task = tokio::spawn(async move {
+                let task: JoinHandle<Result<DynamicImage>> = tokio::spawn(async move {
                     // For modern themes (non-retro), swap dark/light to fix color inversion
                     if is_retro {
                         manager
@@ -472,7 +474,7 @@ impl App {
             if task.is_finished() {
                 if let Some(task) = self.artwork_task.take() {
                     if let Ok(Ok(img)) = task.await {
-                        self.artwork_protocol = Some(self.artwork_converter.create_protocol(img));
+                        self.artwork_protocol = self.artwork_converter.create_protocol(img);
                     }
                 }
                 self.is_loading_artwork = false;
@@ -1078,7 +1080,7 @@ mod tests {
         async fn set_repeat(&self, _mode: RepeatMode) -> Result<()> {
             Ok(())
         }
-        async fn get_artwork_url(&self) -> Result<Option<String>> {
+        async fn get_artwork_url(&self, _track: &Track) -> Result<Option<String>> {
             Ok(Some("http://example.com/artwork.jpg".into()))
         }
     }
