@@ -138,7 +138,7 @@ pub struct App {
 impl App {
     pub async fn new() -> Result<Self> {
         let config = crate::config::Config::load().await?;
-        let player = Box::new(AppleMusicController::new());
+        let player = Box::new(AppleMusicController::new(config.artwork.cache_size));
         Self::with_player_and_config(player, config).await
     }
 
@@ -266,6 +266,7 @@ impl App {
     pub fn navigate_left(&mut self) {}
     pub fn navigate_right(&mut self) {}
 
+    #[allow(dead_code)]
     pub async fn toggle_shuffle(&mut self) -> Result<()> {
         self.player.set_shuffle(true).await
     }

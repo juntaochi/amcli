@@ -2,6 +2,8 @@
 use super::{MediaPlayer, PlaybackState, RepeatMode, Track};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use lru::LruCache;
+use std::num::NonZeroUsize;
 use std::time::Duration;
 
 #[cfg(test)]
@@ -29,22 +31,24 @@ impl CommandRunner for OsascriptRunner {
 
 pub struct AppleMusicController {
     runner: Box<dyn CommandRunner>,
-    artwork_cache: std::sync::Mutex<Option<(String, Option<String>)>>,
+    artwork_cache: std::sync::Mutex<LruCache<String, Option<String>>>,
 }
 
 impl AppleMusicController {
-    pub fn new() -> Self {
+    pub fn new(cache_size: usize) -> Self {
+        let cache_size = NonZeroUsize::new(cache_size).unwrap_or(NonZeroUsize::new(100).unwrap());
         Self {
             runner: Box::new(OsascriptRunner),
-            artwork_cache: std::sync::Mutex::new(None),
+            artwork_cache: std::sync::Mutex::new(LruCache::new(cache_size)),
         }
     }
 
     #[cfg(test)]
-    pub fn with_runner(runner: Box<dyn CommandRunner>) -> Self {
+    pub fn with_runner(runner: Box<dyn CommandRunner>, cache_size: usize) -> Self {
+        let cache_size = NonZeroUsize::new(cache_size).unwrap_or(NonZeroUsize::new(100).unwrap());
         Self {
             runner,
-            artwork_cache: std::sync::Mutex::new(None),
+            artwork_cache: std::sync::Mutex::new(LruCache::new(cache_size)),
         }
     }
 
@@ -199,11 +203,9 @@ impl MediaPlayer for AppleMusicController {
         let track_key = format!("{}|{}", track.artist, track.name);
 
         // Check cache
-        if let Ok(cache) = self.artwork_cache.lock() {
-            if let Some((key, url)) = &*cache {
-                if key == &track_key {
-                    return Ok(url.clone());
-                }
+        if let Ok(mut cache) = self.artwork_cache.lock() {
+            if let Some(url) = cache.get(&track_key) {
+                return Ok(url.clone());
             }
         }
 
@@ -225,7 +227,7 @@ impl MediaPlayer for AppleMusicController {
 
         // Update cache
         if let Ok(mut cache) = self.artwork_cache.lock() {
-            *cache = Some((track_key, artwork_url.clone()));
+            cache.put(track_key, artwork_url.clone());
         }
 
         Ok(artwork_url)
@@ -256,7 +258,7 @@ mod tests {
             .times(1)
             .returning(|_| Ok(mock_output("", true)));
 
-        let controller = AppleMusicController::with_runner(Box::new(mock));
+        let controller = AppleMusicController::with_runner(Box::new(mock), 10);
         assert!(controller.play().await.is_ok());
     }
 
@@ -270,7 +272,7 @@ mod tests {
             .times(1)
             .returning(|_| Ok(mock_output("75", true)));
 
-        let controller = AppleMusicController::with_runner(Box::new(mock));
+        let controller = AppleMusicController::with_runner(Box::new(mock), 10);
         let volume = controller.get_volume().await.unwrap();
         assert_eq!(volume, 75);
     }
@@ -283,7 +285,7 @@ mod tests {
             .times(1)
             .returning(move |_| Ok(mock_output(output, true)));
 
-        let controller = AppleMusicController::with_runner(Box::new(mock));
+        let controller = AppleMusicController::with_runner(Box::new(mock), 10);
         let track = controller.get_current_track().await.unwrap().unwrap();
         assert_eq!(track.name, "Song Name");
         assert_eq!(track.artist, "Artist Name");
