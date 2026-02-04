@@ -62,3 +62,10 @@ RUST_CONVERSION_COMPLETE.md
 PERFORMANCE.md
 lrclib_main.rs
 test_gamma.sh
+
+# Local AI tooling (keep local, never commit)
+/.claude/
+/.brv/
+/.sisyphus/
+/.jules/
+TWITTER_ANNOUNCEMENT.md
