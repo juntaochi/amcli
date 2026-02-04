@@ -230,6 +230,48 @@ impl MediaPlayer for AppleMusicController {
 
         Ok(artwork_url)
     }
+
+    async fn get_player_status(&self) -> Result<(Option<Track>, u8)> {
+        let delimiter = ":::BOLT_SPLIT:::";
+        let script = format!(
+            r#"
+            tell application "Music"
+                set vol to sound volume
+                if player state is not stopped then
+                    return vol & "{0}" & name of current track & "{0}" & artist of current track & "{0}" & album of current track & "{0}" & duration of current track & "{0}" & player position
+                else
+                    return vol
+                end if
+            end tell
+        "#,
+            delimiter
+        );
+
+        let result = self.execute_script(&script).await?;
+        let parts: Vec<&str> = result.split(delimiter).collect();
+
+        if parts.is_empty() {
+            return Err(anyhow!("Empty result from AppleScript"));
+        }
+
+        let volume: u8 = parts[0].parse().unwrap_or(0);
+
+        if parts.len() < 6 {
+            // Stopped or invalid format, return just volume
+            return Ok((None, volume));
+        }
+
+        Ok((
+            Some(Track {
+                name: parts[1].to_string(),
+                artist: parts[2].to_string(),
+                album: parts[3].to_string(),
+                duration: Duration::from_secs_f64(parts[4].parse()?),
+                position: Duration::from_secs_f64(parts[5].parse()?),
+            }),
+            volume,
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -285,6 +327,25 @@ mod tests {
 
         let controller = AppleMusicController::with_runner(Box::new(mock));
         let track = controller.get_current_track().await.unwrap().unwrap();
+        assert_eq!(track.name, "Song Name");
+        assert_eq!(track.artist, "Artist Name");
+        assert_eq!(track.duration.as_secs(), 180);
+        assert_eq!(track.position.as_secs(), 90);
+    }
+
+    #[tokio::test]
+    async fn test_get_player_status() {
+        let mut mock = MockCommandRunner::new();
+        let output = "75:::BOLT_SPLIT:::Song Name:::BOLT_SPLIT:::Artist Name:::BOLT_SPLIT:::Album Name:::BOLT_SPLIT:::180.5:::BOLT_SPLIT:::90.0";
+        mock.expect_execute()
+            .times(1)
+            .returning(move |_| Ok(mock_output(output, true)));
+
+        let controller = AppleMusicController::with_runner(Box::new(mock));
+        let (track, volume) = controller.get_player_status().await.unwrap();
+
+        assert_eq!(volume, 75);
+        let track = track.unwrap();
         assert_eq!(track.name, "Song Name");
         assert_eq!(track.artist, "Artist Name");
         assert_eq!(track.duration.as_secs(), 180);
