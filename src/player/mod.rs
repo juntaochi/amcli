@@ -22,6 +22,13 @@ pub enum PlaybackState {
     Stopped,
 }
 
+#[derive(Debug, Clone)]
+pub struct PlayerStatus {
+    pub track: Option<Track>,
+    pub volume: u8,
+    pub state: PlaybackState,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RepeatMode {
     Off,
@@ -40,6 +47,19 @@ pub trait MediaPlayer: Send + Sync {
     async fn previous(&self) -> Result<()>;
     #[allow(dead_code)]
     async fn stop(&self) -> Result<()>;
+
+    async fn get_player_status(&self) -> Result<PlayerStatus> {
+        let (track, volume, state) = tokio::try_join!(
+            self.get_current_track(),
+            self.get_volume(),
+            self.get_playback_state()
+        )?;
+        Ok(PlayerStatus {
+            track,
+            volume,
+            state,
+        })
+    }
 
     async fn get_current_track(&self) -> Result<Option<Track>>;
     #[allow(dead_code)]
