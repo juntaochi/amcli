@@ -26,6 +26,7 @@ pub enum PlaybackState {
 pub struct PlayerStatus {
     pub track: Option<Track>,
     pub volume: u8,
+    #[allow(dead_code)]
     pub state: PlaybackState,
 }
 
@@ -68,6 +69,7 @@ pub trait MediaPlayer: Send + Sync {
     async fn set_volume(&self, volume: u8) -> Result<()>;
     async fn get_volume(&self) -> Result<u8>;
     async fn seek(&self, seconds: i32) -> Result<()>;
+    #[allow(dead_code)]
     async fn set_shuffle(&self, enabled: bool) -> Result<()>;
     async fn set_repeat(&self, mode: RepeatMode) -> Result<()>;
     async fn get_artwork_url(&self, track: &Track) -> Result<Option<String>>;
