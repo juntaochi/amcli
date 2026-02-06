@@ -14,6 +14,14 @@ pub struct Track {
     pub position: Duration,
 }
 
+#[derive(Debug, Clone)]
+pub struct PlayerStatus {
+    #[allow(dead_code)]
+    pub state: PlaybackState,
+    pub volume: u8,
+    pub track: Option<Track>,
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PlaybackState {
@@ -41,13 +49,17 @@ pub trait MediaPlayer: Send + Sync {
     #[allow(dead_code)]
     async fn stop(&self) -> Result<()>;
 
+    async fn get_player_status(&self) -> Result<PlayerStatus>;
+    #[allow(dead_code)]
     async fn get_current_track(&self) -> Result<Option<Track>>;
     #[allow(dead_code)]
     async fn get_playback_state(&self) -> Result<PlaybackState>;
 
     async fn set_volume(&self, volume: u8) -> Result<()>;
+    #[allow(dead_code)]
     async fn get_volume(&self) -> Result<u8>;
     async fn seek(&self, seconds: i32) -> Result<()>;
+    #[allow(dead_code)]
     async fn set_shuffle(&self, enabled: bool) -> Result<()>;
     async fn set_repeat(&self, mode: RepeatMode) -> Result<()>;
     async fn get_artwork_url(&self, track: &Track) -> Result<Option<String>>;
