@@ -266,6 +266,7 @@ impl App {
     pub fn navigate_left(&mut self) {}
     pub fn navigate_right(&mut self) {}
 
+    #[allow(dead_code)]
     pub async fn toggle_shuffle(&mut self) -> Result<()> {
         self.player.set_shuffle(true).await
     }
@@ -375,11 +376,14 @@ impl App {
     }
 
     pub async fn update(&mut self) -> Result<()> {
-        let (track_result, volume_result) =
-            tokio::join!(self.player.get_current_track(), self.player.get_volume());
+        let status = self.player.get_player_status().await;
 
-        let new_track = track_result.ok().flatten();
-        self.volume = volume_result.unwrap_or(self.volume);
+        let (new_track, volume) = match status {
+            Ok(s) => (s.track, s.volume),
+            Err(_) => (self.current_track.clone(), self.volume),
+        };
+
+        self.volume = volume;
 
         let artwork_url = if let Some(ref track) = new_track {
             self.player.get_artwork_url(track).await.ok().flatten()
@@ -1024,7 +1028,7 @@ fn scroll_text(text: &str, width: usize, frame: u32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::player::{MediaPlayer, PlaybackState, RepeatMode, Track};
+    use crate::player::{MediaPlayer, PlaybackState, PlayerStatus, RepeatMode, Track};
     use async_trait::async_trait;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
@@ -1064,6 +1068,19 @@ mod tests {
         }
         async fn get_playback_state(&self) -> Result<PlaybackState> {
             Ok(PlaybackState::Playing)
+        }
+        async fn get_player_status(&self) -> Result<PlayerStatus> {
+            Ok(PlayerStatus {
+                track: Some(Track {
+                    name: "Test Song".into(),
+                    artist: "Test Artist".into(),
+                    album: "Test Album".into(),
+                    duration: Duration::from_secs(300),
+                    position: Duration::from_secs(150),
+                }),
+                state: PlaybackState::Playing,
+                volume: self.volume,
+            })
         }
         async fn set_volume(&self, _volume: u8) -> Result<()> {
             Ok(())
