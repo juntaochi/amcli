@@ -375,36 +375,88 @@ impl App {
     }
 
     pub async fn update(&mut self) -> Result<()> {
-        let (track_result, volume_result) =
-            tokio::join!(self.player.get_current_track(), self.player.get_volume());
+        // Optimized: Batched call to reduce osascript overhead
+        // If getting status fails (e.g. transient IPC error), we keep old state
+        if let Ok(status) = self.player.get_player_status().await {
+            let new_track = status.track;
+            self.volume = status.volume;
 
-        let new_track = track_result.ok().flatten();
-        self.volume = volume_result.unwrap_or(self.volume);
+            let artwork_url = if let Some(ref track) = new_track {
+                self.player.get_artwork_url(track).await.ok().flatten()
+            } else {
+                None
+            };
 
-        let artwork_url = if let Some(ref track) = new_track {
-            self.player.get_artwork_url(track).await.ok().flatten()
-        } else {
-            None
-        };
+            let track_changed = match (&self.current_track, &new_track) {
+                (Some(c), Some(n)) => c.name != n.name || c.artist != n.artist,
+                (None, Some(_)) => true,
+                _ => false,
+            };
 
-        let track_changed = match (&self.current_track, &new_track) {
-            (Some(c), Some(n)) => c.name != n.name || c.artist != n.artist,
-            (None, Some(_)) => true,
-            _ => false,
-        };
+            if track_changed {
+                self.current_lyrics = None;
+                if let Some(task) = self.lyrics_task.take() {
+                    task.abort();
+                }
 
-        if track_changed {
-            self.current_lyrics = None;
-            if let Some(task) = self.lyrics_task.take() {
-                task.abort();
+                if let Some(ref track) = new_track {
+                    let lyrics_manager = self.lyrics_manager.clone();
+                    let track_clone = track.clone();
+                    let task =
+                        tokio::spawn(async move { lyrics_manager.get_lyrics(&track_clone).await });
+                    self.lyrics_task = Some(task);
+                }
             }
 
-            if let Some(ref track) = new_track {
-                let lyrics_manager = self.lyrics_manager.clone();
-                let track_clone = track.clone();
-                let task =
-                    tokio::spawn(async move { lyrics_manager.get_lyrics(&track_clone).await });
-                self.lyrics_task = Some(task);
+            self.current_track = new_track;
+
+            if artwork_url != self.current_artwork_url {
+                self.current_artwork_url = artwork_url.clone();
+                if let Some(url) = artwork_url {
+                    self.is_loading_artwork = true;
+                    let manager = self.artwork_manager.clone();
+                    let theme = self.current_theme();
+                    let config = self.config.clone();
+                    let is_retro = theme.is_retro;
+
+                    if let Some(task) = self.artwork_task.take() {
+                        task.abort();
+                    }
+
+                    let task: JoinHandle<Result<DynamicImage>> = tokio::spawn(async move {
+                        // For modern themes (non-retro), swap dark/light to fix color inversion
+                        if is_retro {
+                            manager
+                                .get_artwork_themed_v2(
+                                    &url,
+                                    theme.dim,
+                                    theme.primary,
+                                    theme.name,
+                                    config.artwork.mosaic,
+                                    is_retro,
+                                )
+                                .await
+                        } else {
+                            manager
+                                .get_artwork_themed_v2(
+                                    &url,
+                                    theme.primary,
+                                    theme.dim,
+                                    theme.name,
+                                    config.artwork.mosaic,
+                                    is_retro,
+                                )
+                                .await
+                        }
+                    });
+                    self.artwork_task = Some(task);
+                } else {
+                    self.artwork_protocol = None;
+                    self.is_loading_artwork = false;
+                    if let Some(task) = self.artwork_task.take() {
+                        task.abort();
+                    }
+                }
             }
         }
 
@@ -418,57 +470,8 @@ impl App {
             }
         }
 
-        self.current_track = new_track;
         self.throbber_state.calc_next();
         self.animation_frame = self.animation_frame.wrapping_add(1);
-        if artwork_url != self.current_artwork_url {
-            self.current_artwork_url = artwork_url.clone();
-            if let Some(url) = artwork_url {
-                self.is_loading_artwork = true;
-                let manager = self.artwork_manager.clone();
-                let theme = self.current_theme();
-                let config = self.config.clone();
-                let is_retro = theme.is_retro;
-
-                if let Some(task) = self.artwork_task.take() {
-                    task.abort();
-                }
-
-                let task: JoinHandle<Result<DynamicImage>> = tokio::spawn(async move {
-                    // For modern themes (non-retro), swap dark/light to fix color inversion
-                    if is_retro {
-                        manager
-                            .get_artwork_themed_v2(
-                                &url,
-                                theme.dim,
-                                theme.primary,
-                                theme.name,
-                                config.artwork.mosaic,
-                                is_retro,
-                            )
-                            .await
-                    } else {
-                        manager
-                            .get_artwork_themed_v2(
-                                &url,
-                                theme.primary,
-                                theme.dim,
-                                theme.name,
-                                config.artwork.mosaic,
-                                is_retro,
-                            )
-                            .await
-                    }
-                });
-                self.artwork_task = Some(task);
-            } else {
-                self.artwork_protocol = None;
-                self.is_loading_artwork = false;
-                if let Some(task) = self.artwork_task.take() {
-                    task.abort();
-                }
-            }
-        }
 
         if let Some(task) = &mut self.artwork_task {
             if task.is_finished() {
@@ -1024,7 +1027,7 @@ fn scroll_text(text: &str, width: usize, frame: u32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::player::{MediaPlayer, PlaybackState, RepeatMode, Track};
+    use crate::player::{MediaPlayer, PlaybackState, PlayerStatus, RepeatMode, Track};
     use async_trait::async_trait;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
@@ -1064,6 +1067,19 @@ mod tests {
         }
         async fn get_playback_state(&self) -> Result<PlaybackState> {
             Ok(PlaybackState::Playing)
+        }
+        async fn get_player_status(&self) -> Result<PlayerStatus> {
+            Ok(PlayerStatus {
+                state: PlaybackState::Playing,
+                volume: self.volume,
+                track: Some(Track {
+                    name: "Test Song".into(),
+                    artist: "Test Artist".into(),
+                    album: "Test Album".into(),
+                    duration: Duration::from_secs(300),
+                    position: Duration::from_secs(150),
+                }),
+            })
         }
         async fn set_volume(&self, _volume: u8) -> Result<()> {
             Ok(())
