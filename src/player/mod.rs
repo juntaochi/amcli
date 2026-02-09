@@ -29,6 +29,14 @@ pub enum RepeatMode {
     All,
 }
 
+#[derive(Debug, Clone)]
+pub struct PlayerStatus {
+    #[allow(dead_code)]
+    pub state: PlaybackState,
+    pub volume: u8,
+    pub track: Option<Track>,
+}
+
 #[async_trait]
 pub trait MediaPlayer: Send + Sync {
     #[allow(dead_code)]
@@ -41,13 +49,27 @@ pub trait MediaPlayer: Send + Sync {
     #[allow(dead_code)]
     async fn stop(&self) -> Result<()>;
 
+    #[allow(dead_code)]
     async fn get_current_track(&self) -> Result<Option<Track>>;
     #[allow(dead_code)]
     async fn get_playback_state(&self) -> Result<PlaybackState>;
 
+    async fn get_player_status(&self) -> Result<PlayerStatus> {
+        Ok(PlayerStatus {
+            track: self.get_current_track().await.unwrap_or(None),
+            volume: self.get_volume().await.unwrap_or(0),
+            state: self
+                .get_playback_state()
+                .await
+                .unwrap_or(PlaybackState::Stopped),
+        })
+    }
+
     async fn set_volume(&self, volume: u8) -> Result<()>;
+    #[allow(dead_code)]
     async fn get_volume(&self) -> Result<u8>;
     async fn seek(&self, seconds: i32) -> Result<()>;
+    #[allow(dead_code)]
     async fn set_shuffle(&self, enabled: bool) -> Result<()>;
     async fn set_repeat(&self, mode: RepeatMode) -> Result<()>;
     async fn get_artwork_url(&self, track: &Track) -> Result<Option<String>>;
