@@ -58,7 +58,10 @@ pub trait MediaPlayer: Send + Sync {
         Ok(PlayerStatus {
             track: self.get_current_track().await.unwrap_or(None),
             volume: self.get_volume().await.unwrap_or(0),
-            state: self.get_playback_state().await.unwrap_or(PlaybackState::Stopped),
+            state: self
+                .get_playback_state()
+                .await
+                .unwrap_or(PlaybackState::Stopped),
         })
     }
 
@@ -66,6 +69,7 @@ pub trait MediaPlayer: Send + Sync {
     #[allow(dead_code)]
     async fn get_volume(&self) -> Result<u8>;
     async fn seek(&self, seconds: i32) -> Result<()>;
+    #[allow(dead_code)]
     async fn set_shuffle(&self, enabled: bool) -> Result<()>;
     async fn set_repeat(&self, mode: RepeatMode) -> Result<()>;
     async fn get_artwork_url(&self, track: &Track) -> Result<Option<String>>;
