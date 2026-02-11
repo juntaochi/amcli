@@ -267,7 +267,7 @@ impl MediaPlayer for AppleMusicController {
         let result = self.execute_script(script).await?;
         let parts: Vec<&str> = result.split(":::BOLT_SPLIT:::").collect();
 
-        let volume = parts.get(0).and_then(|s| s.parse::<u8>().ok());
+        let volume = parts.first().and_then(|s| s.parse::<u8>().ok());
 
         let state = parts.get(1).map(|s| match *s {
             "playing" => PlaybackState::Playing,
