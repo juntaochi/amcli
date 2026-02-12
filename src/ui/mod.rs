@@ -16,7 +16,9 @@ use crate::artwork::ArtworkManager;
 use crate::lyrics::{
     local::LocalProvider, lrclib::LrclibProvider, netease::NeteaseProvider, Lyrics, LyricsManager,
 };
-use crate::player::{apple_music::AppleMusicController, MediaPlayer, RepeatMode, Track};
+use crate::player::{
+    apple_music::AppleMusicController, MediaPlayer, PlayerStatus, RepeatMode, Track,
+};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::StatefulImage;
 use throbber_widgets_tui::{Throbber, ThrobberState, WhichUse, BRAILLE_SIX_DOUBLE};
@@ -266,6 +268,7 @@ impl App {
     pub fn navigate_left(&mut self) {}
     pub fn navigate_right(&mut self) {}
 
+    #[allow(dead_code)]
     pub async fn toggle_shuffle(&mut self) -> Result<()> {
         self.player.set_shuffle(true).await
     }
@@ -375,11 +378,20 @@ impl App {
     }
 
     pub async fn update(&mut self) -> Result<()> {
-        let (track_result, volume_result) =
-            tokio::join!(self.player.get_current_track(), self.player.get_volume());
+        let status = self
+            .player
+            .get_player_status()
+            .await
+            .unwrap_or(PlayerStatus {
+                track: None,
+                volume: None,
+                state: None,
+            });
 
-        let new_track = track_result.ok().flatten();
-        self.volume = volume_result.unwrap_or(self.volume);
+        let new_track = status.track;
+        if let Some(vol) = status.volume {
+            self.volume = vol;
+        }
 
         let artwork_url = if let Some(ref track) = new_track {
             self.player.get_artwork_url(track).await.ok().flatten()
@@ -1035,6 +1047,20 @@ mod tests {
 
     #[async_trait]
     impl MediaPlayer for MockPlayer {
+        async fn get_player_status(&self) -> Result<PlayerStatus> {
+            Ok(PlayerStatus {
+                track: Some(Track {
+                    name: "Test Song".into(),
+                    artist: "Test Artist".into(),
+                    album: "Test Album".into(),
+                    duration: Duration::from_secs(300),
+                    position: Duration::from_secs(150),
+                }),
+                volume: Some(self.volume),
+                state: Some(PlaybackState::Playing),
+            })
+        }
+
         async fn play(&self) -> Result<()> {
             Ok(())
         }
