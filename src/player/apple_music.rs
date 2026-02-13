@@ -123,7 +123,7 @@ impl MediaPlayer for AppleMusicController {
         let parts: Vec<&str> = result.split(":::BOLT_SPLIT:::").collect();
 
         if parts.len() < 2 {
-             return Err(anyhow!("Invalid status info format"));
+            return Err(anyhow!("Invalid status info format"));
         }
 
         let volume: u8 = parts[0].parse()?;
@@ -138,7 +138,7 @@ impl MediaPlayer for AppleMusicController {
         let track = if state != PlaybackState::Stopped && parts.len() >= 3 {
             let track_parts: Vec<&str> = parts[2].split(":::BOLT_PART:::").collect();
             if track_parts.len() < 5 {
-                 return Err(anyhow!("Invalid track info format"));
+                return Err(anyhow!("Invalid track info format"));
             }
             Some(Track {
                 name: track_parts[0].to_string(),

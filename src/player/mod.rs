@@ -18,6 +18,7 @@ pub struct Track {
 pub struct PlayerStatus {
     pub track: Option<Track>,
     pub volume: u8,
+    #[allow(dead_code)]
     pub state: PlaybackState,
 }
 
