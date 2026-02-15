@@ -67,11 +67,13 @@ impl SettingsMenu {
         }
     }
 
+    #[allow(dead_code)]
     pub fn open(&mut self) {
         self.is_open = true;
         self.selected_index = 0;
     }
 
+    #[allow(dead_code)]
     pub fn close(&mut self) {
         self.is_open = false;
     }
@@ -155,6 +157,7 @@ impl SettingsMenu {
         self.items.get(self.selected_index)
     }
 
+    #[allow(dead_code)]
     pub fn click_at(&mut self, row: u16, settings_area: Rect) -> Option<usize> {
         // Calculate which item was clicked based on row position
         // Settings area starts with border, title, then 4 items
