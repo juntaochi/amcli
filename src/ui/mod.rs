@@ -306,6 +306,7 @@ impl App {
     pub fn navigate_left(&mut self) {}
     pub fn navigate_right(&mut self) {}
 
+    #[allow(dead_code)]
     pub async fn toggle_shuffle(&mut self) -> Result<()> {
         self.player.set_shuffle(true).await
     }
