@@ -7,6 +7,10 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Gauge, Paragraph},
     Frame,
 };
+use std::borrow::Cow;
+use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinHandle;
@@ -111,6 +115,40 @@ pub const THEMES: &[Theme] = &[
     THEME_TERMINAL_CLEAN,
 ];
 
+#[derive(Default)]
+struct ScrollCache {
+    last_frame: u32,
+    // (index, width) -> (input_hash, scrolled_string)
+    cache: HashMap<(usize, usize), (u64, String)>,
+}
+
+impl ScrollCache {
+    fn get<'a>(&mut self, text: &'a str, width: usize, frame: u32, index: usize) -> Cow<'a, str> {
+        if frame != self.last_frame {
+            self.cache.clear();
+            self.last_frame = frame;
+        }
+
+        if text.chars().count() <= width {
+            return Cow::Borrowed(text);
+        }
+
+        let mut hasher = DefaultHasher::new();
+        text.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        if let Some((stored_hash, s)) = self.cache.get(&(index, width)) {
+            if *stored_hash == hash {
+                return Cow::Owned(s.clone());
+            }
+        }
+
+        let s = scroll_text(text, width, frame).into_owned();
+        self.cache.insert((index, width), (hash, s.clone()));
+        Cow::Owned(s)
+    }
+}
+
 pub struct App {
     player: Box<dyn MediaPlayer>,
     current_track: Option<Track>,
@@ -133,6 +171,7 @@ pub struct App {
     lyrics_task: Option<JoinHandle<Result<Option<Lyrics>>>>,
     config: crate::config::Config,
     settings_menu: SettingsMenu,
+    scroll_cache: ScrollCache,
 }
 
 impl App {
@@ -199,6 +238,7 @@ impl App {
             lyrics_task: None,
             config,
             settings_menu,
+            scroll_cache: ScrollCache::default(),
         })
     }
 
@@ -801,15 +841,20 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                             .add_modifier(Modifier::ITALIC),
                     )));
 
-                    let display_val = scroll_text(&values[i], col_width, app.animation_frame);
+                    let display_val =
+                        app.scroll_cache
+                            .get(&values[i], col_width, app.animation_frame, i);
 
-                    lines.push(Line::from(Span::styled(
-                        format!(" {} ", display_val),
-                        Style::default()
-                            .bg(theme.dim)
-                            .fg(theme.bg)
-                            .add_modifier(Modifier::BOLD),
-                    )));
+                    let val_style = Style::default()
+                        .bg(theme.dim)
+                        .fg(theme.bg)
+                        .add_modifier(Modifier::BOLD);
+
+                    lines.push(Line::from(vec![
+                        Span::styled(" ", val_style),
+                        Span::styled(display_val, val_style),
+                        Span::styled(" ", val_style),
+                    ]));
                 }
                 f.render_widget(
                     Paragraph::new(lines).block(
@@ -837,15 +882,20 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         .add_modifier(Modifier::ITALIC),
                 )));
 
-                let display_val = scroll_text(&values[i], col_width, app.animation_frame);
+                let display_val =
+                    app.scroll_cache
+                        .get(&values[i], col_width, app.animation_frame, i);
 
-                lines.push(Line::from(Span::styled(
-                    format!(" {} ", display_val),
-                    Style::default()
-                        .bg(theme.dim)
-                        .fg(theme.bg)
-                        .add_modifier(Modifier::BOLD),
-                )));
+                let val_style = Style::default()
+                    .bg(theme.dim)
+                    .fg(theme.bg)
+                    .add_modifier(Modifier::BOLD);
+
+                lines.push(Line::from(vec![
+                    Span::styled(" ", val_style),
+                    Span::styled(display_val, val_style),
+                    Span::styled(" ", val_style),
+                ]));
             }
             f.render_widget(
                 Paragraph::new(lines)
@@ -1002,23 +1052,27 @@ fn format_duration(duration: Duration) -> String {
 }
 
 // Optimized: Uses iterator chaining/cycling to avoid intermediate Vec<char> and format! allocations.
+// Returns Cow to avoid allocation when no scrolling is needed.
 // Benchmark: ~32% speedup (329ms vs 484ms for 100k iters).
-fn scroll_text(text: &str, width: usize, frame: u32) -> String {
+fn scroll_text(text: &str, width: usize, frame: u32) -> Cow<'_, str> {
     let char_count = text.chars().count();
     if char_count <= width {
-        return text.to_string();
+        return Cow::Borrowed(text);
     }
 
     let gap_len = 3;
     let total_len = char_count + gap_len;
     let offset = (frame as usize / 2) % total_len;
 
-    text.chars()
+    let s: String = text
+        .chars()
         .chain(std::iter::repeat_n(' ', gap_len))
         .cycle()
         .skip(offset)
         .take(width)
-        .collect()
+        .collect();
+
+    Cow::Owned(s)
 }
 
 #[cfg(test)]
