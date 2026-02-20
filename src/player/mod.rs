@@ -29,6 +29,14 @@ pub enum RepeatMode {
     All,
 }
 
+#[derive(Debug, Clone)]
+pub struct PlayerStatus {
+    #[allow(dead_code)]
+    pub state: PlaybackState,
+    pub volume: u8,
+    pub track: Option<Track>,
+}
+
 #[async_trait]
 pub trait MediaPlayer: Send + Sync {
     #[allow(dead_code)]
@@ -51,4 +59,22 @@ pub trait MediaPlayer: Send + Sync {
     async fn set_shuffle(&self, enabled: bool) -> Result<()>;
     async fn set_repeat(&self, mode: RepeatMode) -> Result<()>;
     async fn get_artwork_url(&self, track: &Track) -> Result<Option<String>>;
+
+    async fn get_player_status(&self) -> Result<PlayerStatus> {
+        let (state_res, volume_res, track_res) = tokio::join!(
+            self.get_playback_state(),
+            self.get_volume(),
+            self.get_current_track()
+        );
+
+        let state = state_res.unwrap_or(PlaybackState::Stopped);
+        let volume = volume_res.unwrap_or(0);
+        let track = track_res.unwrap_or(None);
+
+        Ok(PlayerStatus {
+            state,
+            volume,
+            track,
+        })
+    }
 }
