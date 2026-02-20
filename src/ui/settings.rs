@@ -67,6 +67,7 @@ impl SettingsMenu {
         }
     }
 
+    #[allow(dead_code)]
     pub fn open(&mut self) {
         self.is_open = true;
         self.selected_index = 0;
@@ -103,17 +104,14 @@ impl SettingsMenu {
     }
 
     fn should_skip_current_item(&self) -> bool {
-        let album_enabled = self
+        let album_enabled = match self
             .items
             .iter()
-            .find_map(|item| {
-                if let SettingsItem::Album { enabled } = item {
-                    Some(*enabled)
-                } else {
-                    None
-                }
-            })
-            .unwrap_or(true);
+            .find(|item| matches!(item, SettingsItem::Album { .. }))
+        {
+            Some(SettingsItem::Album { enabled }) => *enabled,
+            _ => true,
+        };
 
         if let Some(SettingsItem::Mosaic { .. }) = self.items.get(self.selected_index) {
             return !album_enabled;
@@ -128,6 +126,8 @@ impl SettingsMenu {
     }
 
     pub fn update_theme(&mut self, theme_index: usize) {
+        // We need to find the Theme item to get total_themes, then update it
+        // The theme item is always at index 1 in the constructor
         if let Some(SettingsItem::Theme { total_themes, .. }) = self.items.get(1) {
             let total = *total_themes;
             if let Some(item) = self.items.get_mut(1) {
@@ -155,10 +155,13 @@ impl SettingsMenu {
         self.items.get(self.selected_index)
     }
 
+    #[allow(dead_code)]
     pub fn click_at(&mut self, row: u16, settings_area: Rect) -> Option<usize> {
         // Calculate which item was clicked based on row position
-        // Settings area starts with border, title, then 4 items
-        let items_start = settings_area.y + 2; // Account for border and title
+        // Settings area starts with border, title, then items
+        // The render logic puts items inside an inner block.
+        // Let's approximate: items start at y + 1 (border)
+        let items_start = settings_area.y + 1;
         if row >= items_start && row < items_start + self.items.len() as u16 {
             let clicked_index = (row - items_start) as usize;
             if clicked_index < self.items.len() {
@@ -173,8 +176,8 @@ impl SettingsMenu {
         let area = f.area();
 
         // Create centered overlay
-        let popup_width = 60.min(area.width - 4);
-        let popup_height = 12.min(area.height - 4);
+        let popup_width = 60.min(area.width.saturating_sub(4));
+        let popup_height = 12.min(area.height.saturating_sub(4));
 
         let popup_area = Rect {
             x: (area.width.saturating_sub(popup_width)) / 2,
@@ -214,19 +217,24 @@ impl SettingsMenu {
         // Render menu items
         let mut list_items = Vec::new();
 
-        let album_enabled = self
+        let album_enabled = match self
             .items
             .iter()
-            .find_map(|item| {
-                if let SettingsItem::Album { enabled } = item {
-                    Some(*enabled)
-                } else {
-                    None
-                }
-            })
-            .unwrap_or(true);
+            .find(|item| matches!(item, SettingsItem::Album { .. }))
+        {
+            Some(SettingsItem::Album { enabled }) => *enabled,
+            _ => true,
+        };
 
         for (i, item) in self.items.iter().enumerate() {
+            // Logic to skip mosaic item if album is disabled handled in navigate
+            // but for rendering we might want to dim it or hide it.
+            // Current logic in `should_skip_current_item` suggests we skip navigating to it.
+            // Let's render it but maybe simpler logic here.
+
+            // Reconstruct logic from previous file content to be safe
+            // "if let SettingsItem::Mosaic { .. } = item { if !album_enabled { continue; } }"
+
             if let SettingsItem::Mosaic { .. } = item {
                 if !album_enabled {
                     continue;
@@ -234,7 +242,8 @@ impl SettingsMenu {
             }
 
             let is_selected = i == self.selected_index;
-            let (label, value) = match item {
+            // The item text construction...
+            let (label_text, value_text) = match item {
                 SettingsItem::Language { current } => {
                     let lang_str = match current {
                         Language::English => "English",
@@ -268,9 +277,10 @@ impl SettingsMenu {
                 SettingsItem::Close => ("Close / 閉じる", String::new()),
             };
 
-            let line = if value.is_empty() {
+            let line = if value_text.is_empty() {
+                // Close button style
                 vec![Span::styled(
-                    format!("  {}  ", label),
+                    format!("  {}  ", label_text),
                     if is_selected {
                         Style::default()
                             .fg(theme.bg)
@@ -281,9 +291,10 @@ impl SettingsMenu {
                     },
                 )]
             } else {
+                // Key-Value style
                 vec![
                     Span::styled(
-                        format!("  {}: ", label),
+                        format!("  {}: ", label_text),
                         if is_selected {
                             Style::default()
                                 .fg(theme.primary)
@@ -293,7 +304,7 @@ impl SettingsMenu {
                         },
                     ),
                     Span::styled(
-                        format!(" {} ", value),
+                        format!(" {} ", value_text),
                         if is_selected {
                             Style::default()
                                 .fg(theme.bg)
