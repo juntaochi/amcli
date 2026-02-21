@@ -375,11 +375,12 @@ impl App {
     }
 
     pub async fn update(&mut self) -> Result<()> {
-        let (track_result, volume_result) =
-            tokio::join!(self.player.get_current_track(), self.player.get_volume());
+        let (new_track, volume) = match self.player.get_player_status().await {
+            Ok(status) => (status.track, status.volume),
+            Err(_) => (None, self.volume),
+        };
 
-        let new_track = track_result.ok().flatten();
-        self.volume = volume_result.unwrap_or(self.volume);
+        self.volume = volume;
 
         let artwork_url = if let Some(ref track) = new_track {
             self.player.get_artwork_url(track).await.ok().flatten()
