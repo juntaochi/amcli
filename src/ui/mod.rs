@@ -7,6 +7,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Gauge, Paragraph},
     Frame,
 };
+use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinHandle;
@@ -266,6 +267,7 @@ impl App {
     pub fn navigate_left(&mut self) {}
     pub fn navigate_right(&mut self) {}
 
+    #[allow(dead_code)]
     pub async fn toggle_shuffle(&mut self) -> Result<()> {
         self.player.set_shuffle(true).await
     }
@@ -802,14 +804,16 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                     )));
 
                     let display_val = scroll_text(&values[i], col_width, app.animation_frame);
+                    let val_style = Style::default()
+                        .bg(theme.dim)
+                        .fg(theme.bg)
+                        .add_modifier(Modifier::BOLD);
 
-                    lines.push(Line::from(Span::styled(
-                        format!(" {} ", display_val),
-                        Style::default()
-                            .bg(theme.dim)
-                            .fg(theme.bg)
-                            .add_modifier(Modifier::BOLD),
-                    )));
+                    lines.push(Line::from(vec![
+                        Span::styled(" ", val_style),
+                        Span::styled(display_val, val_style),
+                        Span::styled(" ", val_style),
+                    ]));
                 }
                 f.render_widget(
                     Paragraph::new(lines).block(
@@ -838,14 +842,16 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 )));
 
                 let display_val = scroll_text(&values[i], col_width, app.animation_frame);
+                let val_style = Style::default()
+                    .bg(theme.dim)
+                    .fg(theme.bg)
+                    .add_modifier(Modifier::BOLD);
 
-                lines.push(Line::from(Span::styled(
-                    format!(" {} ", display_val),
-                    Style::default()
-                        .bg(theme.dim)
-                        .fg(theme.bg)
-                        .add_modifier(Modifier::BOLD),
-                )));
+                lines.push(Line::from(vec![
+                    Span::styled(" ", val_style),
+                    Span::styled(display_val, val_style),
+                    Span::styled(" ", val_style),
+                ]));
             }
             f.render_widget(
                 Paragraph::new(lines)
@@ -1001,24 +1007,27 @@ fn format_duration(duration: Duration) -> String {
     format!("{:02}:{:02}", minutes, seconds)
 }
 
-// Optimized: Uses iterator chaining/cycling to avoid intermediate Vec<char> and format! allocations.
-// Benchmark: ~32% speedup (329ms vs 484ms for 100k iters).
-fn scroll_text(text: &str, width: usize, frame: u32) -> String {
+// Optimized: Uses Cow to avoid allocation when text fits (common case).
+// When scrolling, uses iterator chaining to avoid intermediate allocations.
+// Benchmark: O(1) allocs for static text vs O(N).
+fn scroll_text(text: &str, width: usize, frame: u32) -> Cow<'_, str> {
     let char_count = text.chars().count();
     if char_count <= width {
-        return text.to_string();
+        return Cow::Borrowed(text);
     }
 
     let gap_len = 3;
     let total_len = char_count + gap_len;
     let offset = (frame as usize / 2) % total_len;
 
-    text.chars()
-        .chain(std::iter::repeat_n(' ', gap_len))
-        .cycle()
-        .skip(offset)
-        .take(width)
-        .collect()
+    Cow::Owned(
+        text.chars()
+            .chain(std::iter::repeat_n(' ', gap_len))
+            .cycle()
+            .skip(offset)
+            .take(width)
+            .collect(),
+    )
 }
 
 #[cfg(test)]
@@ -1082,6 +1091,27 @@ mod tests {
         }
         async fn get_artwork_url(&self, _track: &Track) -> Result<Option<String>> {
             Ok(Some("http://example.com/artwork.jpg".into()))
+        }
+    }
+
+    #[test]
+    fn test_scroll_text_optimization() {
+        // Test that short text returns Borrowed variant (no allocation)
+        let text = "Short";
+        let width = 10;
+        let result = scroll_text(text, width, 0);
+        match result {
+            std::borrow::Cow::Borrowed(_) => assert!(true),
+            std::borrow::Cow::Owned(_) => panic!("Should be borrowed for short text"),
+        }
+
+        // Test that long text returns Owned variant (allocation for scrolling)
+        let text_long = "Long text that needs scrolling";
+        let width_small = 5;
+        let result_long = scroll_text(text_long, width_small, 0);
+        match result_long {
+            std::borrow::Cow::Borrowed(_) => panic!("Should be owned for long text"),
+            std::borrow::Cow::Owned(_) => assert!(true),
         }
     }
 
