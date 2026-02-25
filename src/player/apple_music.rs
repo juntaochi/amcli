@@ -1,5 +1,5 @@
 // src/player/apple_music.rs
-use super::{MediaPlayer, PlaybackState, RepeatMode, Track};
+use super::{MediaPlayer, PlaybackState, PlayerStatus, RepeatMode, Track};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use std::time::Duration;
@@ -148,6 +148,62 @@ impl MediaPlayer for AppleMusicController {
         }
     }
 
+    async fn get_player_status(&self) -> Result<PlayerStatus> {
+        let script = r#"
+            tell application "Music"
+                set pState to player state as string
+                set vol to sound volume
+                if pState is not "stopped" then
+                    set tInfo to name of current track & ":::BOLT_SPLIT:::" & ¬
+                                  artist of current track & ":::BOLT_SPLIT:::" & ¬
+                                  album of current track & ":::BOLT_SPLIT:::" & ¬
+                                  duration of current track & ":::BOLT_SPLIT:::" & ¬
+                                  player position
+                    return pState & ":::BOLT_SPLIT:::" & vol & ":::BOLT_SPLIT:::" & tInfo
+                else
+                    return pState & ":::BOLT_SPLIT:::" & vol & ":::BOLT_SPLIT:::"
+                end if
+            end tell
+        "#;
+
+        let result = self.execute_script(script).await?;
+        let parts: Vec<&str> = result.split(":::BOLT_SPLIT:::").collect();
+
+        if parts.len() < 3 {
+            return Err(anyhow!("Invalid status format"));
+        }
+
+        let state_str = parts[0];
+        let volume_str = parts[1];
+
+        let state = match state_str {
+            "playing" | "fast forwarding" | "rewinding" => PlaybackState::Playing,
+            "paused" => PlaybackState::Paused,
+            "stopped" => PlaybackState::Stopped,
+            _ => return Err(anyhow!("Unknown playback state: {}", state_str)),
+        };
+
+        let volume = volume_str.parse::<u8>()?;
+
+        let track = if parts.len() >= 7 {
+            Some(Track {
+                name: parts[2].to_string(),
+                artist: parts[3].to_string(),
+                album: parts[4].to_string(),
+                duration: Duration::from_secs_f64(parts[5].parse()?),
+                position: Duration::from_secs_f64(parts[6].parse()?),
+            })
+        } else {
+            None
+        };
+
+        Ok(PlayerStatus {
+            track,
+            volume,
+            state,
+        })
+    }
+
     async fn set_volume(&self, volume: u8) -> Result<()> {
         let script = format!(
             r#"tell application "Music" to set sound volume to {}"#,
@@ -289,5 +345,42 @@ mod tests {
         assert_eq!(track.artist, "Artist Name");
         assert_eq!(track.duration.as_secs(), 180);
         assert_eq!(track.position.as_secs(), 90);
+    }
+
+    #[tokio::test]
+    async fn test_get_player_status() {
+        let mut mock = MockCommandRunner::new();
+        // Mock response for playing state with track info containing special chars
+        let output = "playing:::BOLT_SPLIT:::80:::BOLT_SPLIT:::Test | Track:::BOLT_SPLIT:::Test Artist:::BOLT_SPLIT:::Test Album:::BOLT_SPLIT:::200.0:::BOLT_SPLIT:::100.0";
+        mock.expect_execute()
+            .times(1)
+            .returning(move |_| Ok(mock_output(output, true)));
+
+        let controller = AppleMusicController::with_runner(Box::new(mock));
+        let status = controller.get_player_status().await.unwrap();
+
+        assert_eq!(status.state, PlaybackState::Playing);
+        assert_eq!(status.volume, 80);
+
+        let track = status.track.unwrap();
+        assert_eq!(track.name, "Test | Track");
+        assert_eq!(track.artist, "Test Artist");
+        assert_eq!(track.duration.as_secs(), 200);
+        assert_eq!(track.position.as_secs(), 100);
+
+        // Test stopped state
+        let mut mock_stopped = MockCommandRunner::new();
+        let output_stopped = "stopped:::BOLT_SPLIT:::50:::BOLT_SPLIT:::";
+        mock_stopped
+            .expect_execute()
+            .times(1)
+            .returning(move |_| Ok(mock_output(output_stopped, true)));
+
+        let controller_stopped = AppleMusicController::with_runner(Box::new(mock_stopped));
+        let status_stopped = controller_stopped.get_player_status().await.unwrap();
+
+        assert_eq!(status_stopped.state, PlaybackState::Stopped);
+        assert_eq!(status_stopped.volume, 50);
+        assert!(status_stopped.track.is_none());
     }
 }
