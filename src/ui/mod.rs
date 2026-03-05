@@ -266,6 +266,7 @@ impl App {
     pub fn navigate_left(&mut self) {}
     pub fn navigate_right(&mut self) {}
 
+    #[allow(dead_code)]
     pub async fn toggle_shuffle(&mut self) -> Result<()> {
         self.player.set_shuffle(true).await
     }
@@ -375,11 +376,13 @@ impl App {
     }
 
     pub async fn update(&mut self) -> Result<()> {
-        let (track_result, volume_result) =
-            tokio::join!(self.player.get_current_track(), self.player.get_volume());
+        // Fetch track, volume, and state in a single operation
+        let (new_track, new_volume) = match self.player.get_player_status().await {
+            Ok(status) => (status.track, status.volume),
+            Err(_) => (None, self.volume), // Fallback to current volume on error to prevent UI flicker
+        };
 
-        let new_track = track_result.ok().flatten();
-        self.volume = volume_result.unwrap_or(self.volume);
+        self.volume = new_volume;
 
         let artwork_url = if let Some(ref track) = new_track {
             self.player.get_artwork_url(track).await.ok().flatten()
