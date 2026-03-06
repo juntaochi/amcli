@@ -375,11 +375,16 @@ impl App {
     }
 
     pub async fn update(&mut self) -> Result<()> {
-        let (track_result, volume_result) =
-            tokio::join!(self.player.get_current_track(), self.player.get_volume());
+        let status_result = self.player.get_player_status().await;
 
-        let new_track = track_result.ok().flatten();
-        self.volume = volume_result.unwrap_or(self.volume);
+        let new_track;
+        if let Ok(status) = status_result {
+            new_track = status.track;
+            self.volume = status.volume;
+        } else {
+            // Retain previous state on transient IPC failures to prevent UI flickering
+            new_track = self.current_track.clone();
+        }
 
         let artwork_url = if let Some(ref track) = new_track {
             self.player.get_artwork_url(track).await.ok().flatten()
