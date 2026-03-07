@@ -250,15 +250,24 @@ impl MediaPlayer for AppleMusicController {
             }
         } else if let Some(p) = part1 {
             // We have track info (7 parts total)
-            if let (Some(artist), Some(album), Some(duration_str), Some(position_str), Some(vol_str), Some(state_str)) = (
+            if let (
+                Some(artist),
+                Some(album),
+                Some(duration_str),
+                Some(position_str),
+                Some(vol_str),
+                Some(state_str),
+            ) = (
                 part2,
                 part3,
                 parts.next(),
                 parts.next(),
                 parts.next(),
-                parts.next()
+                parts.next(),
             ) {
-                if let (Ok(duration), Ok(position)) = (duration_str.parse::<f64>(), position_str.parse::<f64>()) {
+                if let (Ok(duration), Ok(position)) =
+                    (duration_str.parse::<f64>(), position_str.parse::<f64>())
+                {
                     track = Some(Track {
                         name: p.to_string(),
                         artist: artist.to_string(),

@@ -56,6 +56,7 @@ pub trait MediaPlayer: Send + Sync {
     async fn set_volume(&self, volume: u8) -> Result<()>;
     async fn get_volume(&self) -> Result<u8>;
     async fn seek(&self, seconds: i32) -> Result<()>;
+    #[allow(dead_code)]
     async fn set_shuffle(&self, enabled: bool) -> Result<()>;
     async fn set_repeat(&self, mode: RepeatMode) -> Result<()>;
     async fn get_artwork_url(&self, track: &Track) -> Result<Option<String>>;
@@ -65,10 +66,8 @@ pub trait MediaPlayer: Send + Sync {
     // this default fallback utilizes `tokio::join!` to fetch track and volume concurrently to reduce overall wait time
     // for non-optimized trait consumers.
     async fn get_player_status(&self) -> Result<PlayerStatus> {
-        let (track_result, volume_result) = tokio::join!(
-            self.get_current_track(),
-            self.get_volume()
-        );
+        let (track_result, volume_result) =
+            tokio::join!(self.get_current_track(), self.get_volume());
         Ok(PlayerStatus {
             track: track_result.unwrap_or(None),
             volume: volume_result.ok().unwrap_or(50),
