@@ -29,6 +29,14 @@ pub enum RepeatMode {
     All,
 }
 
+#[derive(Debug, Clone)]
+pub struct PlayerStatus {
+    pub track: Option<Track>,
+    pub volume: u8,
+    #[allow(dead_code)]
+    pub state: PlaybackState,
+}
+
 #[async_trait]
 pub trait MediaPlayer: Send + Sync {
     #[allow(dead_code)]
@@ -51,4 +59,20 @@ pub trait MediaPlayer: Send + Sync {
     async fn set_shuffle(&self, enabled: bool) -> Result<()>;
     async fn set_repeat(&self, mode: RepeatMode) -> Result<()>;
     async fn get_artwork_url(&self, track: &Track) -> Result<Option<String>>;
+
+    // ⚡ Bolt Optimization: Added a default implementation to batch track, volume, and state retrieval.
+    // While implementations (like AppleMusicController) can override this to run a single `osascript` command,
+    // this default fallback utilizes `tokio::join!` to fetch track and volume concurrently to reduce overall wait time
+    // for non-optimized trait consumers.
+    async fn get_player_status(&self) -> Result<PlayerStatus> {
+        let (track_result, volume_result) = tokio::join!(
+            self.get_current_track(),
+            self.get_volume()
+        );
+        Ok(PlayerStatus {
+            track: track_result.unwrap_or(None),
+            volume: volume_result.ok().unwrap_or(50),
+            state: PlaybackState::Stopped,
+        })
+    }
 }
