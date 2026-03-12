@@ -803,13 +803,16 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
                     let display_val = scroll_text(&values[i], col_width, app.animation_frame);
 
-                    lines.push(Line::from(Span::styled(
-                        format!(" {} ", display_val),
-                        Style::default()
-                            .bg(theme.dim)
-                            .fg(theme.bg)
-                            .add_modifier(Modifier::BOLD),
-                    )));
+                    let style = Style::default()
+                        .bg(theme.dim)
+                        .fg(theme.bg)
+                        .add_modifier(Modifier::BOLD);
+
+                    lines.push(Line::from(vec![
+                        Span::styled(" ", style),
+                        Span::styled(display_val, style),
+                        Span::styled(" ", style),
+                    ]));
                 }
                 f.render_widget(
                     Paragraph::new(lines).block(
@@ -839,13 +842,16 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
                 let display_val = scroll_text(&values[i], col_width, app.animation_frame);
 
-                lines.push(Line::from(Span::styled(
-                    format!(" {} ", display_val),
-                    Style::default()
-                        .bg(theme.dim)
-                        .fg(theme.bg)
-                        .add_modifier(Modifier::BOLD),
-                )));
+                let style = Style::default()
+                    .bg(theme.dim)
+                    .fg(theme.bg)
+                    .add_modifier(Modifier::BOLD);
+
+                lines.push(Line::from(vec![
+                    Span::styled(" ", style),
+                    Span::styled(display_val, style),
+                    Span::styled(" ", style),
+                ]));
             }
             f.render_widget(
                 Paragraph::new(lines)
@@ -1003,22 +1009,24 @@ fn format_duration(duration: Duration) -> String {
 
 // Optimized: Uses iterator chaining/cycling to avoid intermediate Vec<char> and format! allocations.
 // Benchmark: ~32% speedup (329ms vs 484ms for 100k iters).
-fn scroll_text(text: &str, width: usize, frame: u32) -> String {
+fn scroll_text(text: &str, width: usize, frame: u32) -> std::borrow::Cow<'_, str> {
     let char_count = text.chars().count();
     if char_count <= width {
-        return text.to_string();
+        return std::borrow::Cow::Borrowed(text);
     }
 
     let gap_len = 3;
     let total_len = char_count + gap_len;
     let offset = (frame as usize / 2) % total_len;
 
-    text.chars()
-        .chain(std::iter::repeat_n(' ', gap_len))
-        .cycle()
-        .skip(offset)
-        .take(width)
-        .collect()
+    std::borrow::Cow::Owned(
+        text.chars()
+            .chain(std::iter::repeat_n(' ', gap_len))
+            .cycle()
+            .skip(offset)
+            .take(width)
+            .collect()
+    )
 }
 
 #[cfg(test)]
