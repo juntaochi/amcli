@@ -195,6 +195,63 @@ impl MediaPlayer for AppleMusicController {
         Ok(())
     }
 
+    async fn get_player_status(&self) -> Result<crate::player::PlayerStatus> {
+        let script = r#"
+            tell application "Music"
+                set pState to player state as string
+                set pVol to sound volume as string
+                if pState is not "stopped" then
+                    set trackInfo to name of current track & ":::BOLT_SPLIT:::" & ¬
+                                     artist of current track & ":::BOLT_SPLIT:::" & ¬
+                                     album of current track & ":::BOLT_SPLIT:::" & ¬
+                                     duration of current track & ":::BOLT_SPLIT:::" & ¬
+                                     player position
+                    return pState & ":::BOLT_SPLIT:::" & pVol & ":::BOLT_SPLIT:::" & trackInfo
+                else
+                    return pState & ":::BOLT_SPLIT:::" & pVol
+                end if
+            end tell
+        "#;
+
+        let result = self.execute_script(script).await?;
+        if result.is_empty() {
+            return Ok(crate::player::PlayerStatus {
+                track: None,
+                volume: None,
+                state: None,
+            });
+        }
+
+        let parts: Vec<&str> = result.split(":::BOLT_SPLIT:::").collect();
+        let state_str = parts.first().copied().unwrap_or("");
+        let state = match state_str {
+            "playing" => Some(PlaybackState::Playing),
+            "paused" => Some(PlaybackState::Paused),
+            "stopped" => Some(PlaybackState::Stopped),
+            _ => None,
+        };
+
+        let volume = parts.get(1).and_then(|s| s.parse::<u8>().ok());
+
+        let track = if parts.len() >= 7 {
+            Some(Track {
+                name: parts[2].to_string(),
+                artist: parts[3].to_string(),
+                album: parts[4].to_string(),
+                duration: Duration::from_secs_f64(parts[5].parse().unwrap_or(0.0)),
+                position: Duration::from_secs_f64(parts[6].parse().unwrap_or(0.0)),
+            })
+        } else {
+            None
+        };
+
+        Ok(crate::player::PlayerStatus {
+            track,
+            volume,
+            state,
+        })
+    }
+
     async fn get_artwork_url(&self, track: &Track) -> Result<Option<String>> {
         let track_key = format!("{}|{}", track.artist, track.name);
 
