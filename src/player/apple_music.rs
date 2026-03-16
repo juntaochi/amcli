@@ -1,5 +1,5 @@
 // src/player/apple_music.rs
-use super::{MediaPlayer, PlaybackState, RepeatMode, Track};
+use super::{MediaPlayer, PlaybackState, PlayerStatus, RepeatMode, Track};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use std::time::Duration;
@@ -146,6 +146,63 @@ impl MediaPlayer for AppleMusicController {
             "stopped" => Ok(PlaybackState::Stopped),
             _ => Err(anyhow!("Unknown playback state: {}", state)),
         }
+    }
+
+    // ⚡ Bolt Optimization:
+    // Combining playback state, volume, and track metadata into a single AppleScript
+    // execution. Spawning `osascript` processes is expensive (~100-200ms overhead per call).
+    // By fetching all status information at once and returning it delimited, we effectively
+    // halve the number of external processes spawned during the high-frequency UI update loop.
+    async fn get_player_status(&self) -> Result<PlayerStatus> {
+        let script = r#"
+            tell application "Music"
+                set _state to player state as string
+                set _vol to sound volume as string
+                if _state is not "stopped" then
+                    set _track to name of current track & ":::BOLT_SPLIT:::" & ¬
+                                  artist of current track & ":::BOLT_SPLIT:::" & ¬
+                                  album of current track & ":::BOLT_SPLIT:::" & ¬
+                                  duration of current track & ":::BOLT_SPLIT:::" & ¬
+                                  player position
+                else
+                    set _track to ""
+                end if
+                return _state & ":::BOLT_SPLIT:::" & _vol & ":::BOLT_SPLIT:::" & _track
+            end tell
+        "#;
+
+        let result = self.execute_script(script).await?;
+        let parts: Vec<&str> = result.split(":::BOLT_SPLIT:::").collect();
+
+        if parts.len() < 2 {
+            return Err(anyhow!("Invalid status format"));
+        }
+
+        let state = match parts[0] {
+            "playing" => PlaybackState::Playing,
+            "paused" => PlaybackState::Paused,
+            _ => PlaybackState::Stopped,
+        };
+
+        let volume = parts[1].parse::<u8>().ok();
+
+        let track = if parts.len() >= 7 {
+            Some(Track {
+                name: parts[2].to_string(),
+                artist: parts[3].to_string(),
+                album: parts[4].to_string(),
+                duration: Duration::from_secs_f64(parts[5].parse().unwrap_or(0.0)),
+                position: Duration::from_secs_f64(parts[6].parse().unwrap_or(0.0)),
+            })
+        } else {
+            None
+        };
+
+        Ok(PlayerStatus {
+            track,
+            volume,
+            state,
+        })
     }
 
     async fn set_volume(&self, volume: u8) -> Result<()> {
