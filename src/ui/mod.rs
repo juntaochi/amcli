@@ -111,6 +111,16 @@ pub const THEMES: &[Theme] = &[
     THEME_TERMINAL_CLEAN,
 ];
 
+// Optimization: Pre-caches computationally expensive string allocations (e.g., to_uppercase() and format!())
+// when the track changes, eliminating per-frame allocation overhead in the high-frequency UI update loop.
+#[derive(Default)]
+struct MetadataCache {
+    name: String,
+    artist: String,
+    album: String,
+    duration_str: String,
+}
+
 pub struct App {
     player: Box<dyn MediaPlayer>,
     current_track: Option<Track>,
@@ -133,6 +143,7 @@ pub struct App {
     lyrics_task: Option<JoinHandle<Result<Option<Lyrics>>>>,
     config: crate::config::Config,
     settings_menu: SettingsMenu,
+    metadata_cache: MetadataCache,
 }
 
 impl App {
@@ -199,6 +210,7 @@ impl App {
             lyrics_task: None,
             config,
             settings_menu,
+            metadata_cache: MetadataCache::default(),
         })
     }
 
@@ -266,6 +278,7 @@ impl App {
     pub fn navigate_left(&mut self) {}
     pub fn navigate_right(&mut self) {}
 
+    #[allow(dead_code)]
     pub async fn toggle_shuffle(&mut self) -> Result<()> {
         self.player.set_shuffle(true).await
     }
@@ -419,6 +432,20 @@ impl App {
         }
 
         self.current_track = new_track;
+
+        if let Some(ref track) = self.current_track {
+            if track_changed {
+                self.metadata_cache.name = track.name.to_uppercase();
+                self.metadata_cache.artist = track.artist.to_uppercase();
+                self.metadata_cache.album = track.album.to_uppercase();
+            }
+            self.metadata_cache.duration_str = format!(
+                "{} / {}",
+                format_duration(track.position),
+                format_duration(track.duration)
+            );
+        }
+
         self.throbber_state.calc_next();
         self.animation_frame = self.animation_frame.wrapping_add(1);
         if artwork_url != self.current_artwork_url {
@@ -722,7 +749,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         (info_chunk, ratatui::layout::Rect::default())
     };
 
-    if let Some(track) = app.get_current_track() {
+    if let Some(_track) = app.get_current_track() {
         let status_text = if is_jp {
             "動作状態: "
         } else {
@@ -747,21 +774,17 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             None
         };
 
-        let labels = if is_jp {
-            vec!["曲名", "アーティスト", "アルバム"]
+        let labels: &[&str] = if is_jp {
+            &["曲名", "アーティスト", "アルバム"]
         } else {
-            vec!["TRACK TITLE", "ARTIST", "ALBUM REFERENCE"]
+            &["TRACK TITLE", "ARTIST", "ALBUM REFERENCE"]
         };
 
         let values = [
-            track.name.to_uppercase(),
-            track.artist.to_uppercase(),
-            track.album.to_uppercase(),
-            format!(
-                "{} / {}",
-                format_duration(track.position),
-                format_duration(track.duration)
-            ),
+            &app.metadata_cache.name,
+            &app.metadata_cache.artist,
+            &app.metadata_cache.album,
+            &app.metadata_cache.duration_str,
         ];
 
         let _available_height = metadata_area.height as usize;
@@ -801,7 +824,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                             .add_modifier(Modifier::ITALIC),
                     )));
 
-                    let display_val = scroll_text(&values[i], col_width, app.animation_frame);
+                    let display_val = scroll_text(values[i], col_width, app.animation_frame);
 
                     lines.push(Line::from(Span::styled(
                         format!(" {} ", display_val),
@@ -837,7 +860,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         .add_modifier(Modifier::ITALIC),
                 )));
 
-                let display_val = scroll_text(&values[i], col_width, app.animation_frame);
+                let display_val = scroll_text(values[i], col_width, app.animation_frame);
 
                 lines.push(Line::from(Span::styled(
                     format!(" {} ", display_val),
@@ -922,8 +945,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         f.render_widget(gauge, tuner_area);
     }
 
-    let controls = if is_jp {
-        vec![
+    let controls: &[(&str, &str)] = if is_jp {
+        &[
             ("▶再生", "SPC"),
             ("▶▶次", "]"),
             ("◀◀前", "["),
@@ -933,7 +956,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             ("電源", "q"),
         ]
     } else {
-        vec![
+        &[
             ("PLAY", "SPC"),
             ("SKIP", "]"),
             ("PREV", "["),
@@ -950,16 +973,39 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         .constraints(vec![Constraint::Length(btn_width); controls.len()])
         .split(control_area);
 
-    for (i, (label, key)) in controls.iter().enumerate() {
+    // Optimization: Pre-formatted control text stored in static slices to avoid continuous `format!` string allocations on every frame.
+    let controls_formatted: &[(&str, &str)] = if is_jp {
+        &[
+            (" ▶再生", " [SPC] "),
+            (" ▶▶次", " []] "),
+            (" ◀◀前", " [[] "),
+            (" 音量＋", " [+] "),
+            (" 音量－", " [-] "),
+            (" 消音", " [m] "),
+            (" 電源", " [q] "),
+        ]
+    } else {
+        &[
+            (" PLAY", " [SPC] "),
+            (" SKIP", " []] "),
+            (" PREV", " [[] "),
+            (" VOL+", " [+] "),
+            (" VOL-", " [-] "),
+            (" MUTE", " [m] "),
+            (" EXIT", " [q] "),
+        ]
+    };
+
+    for (i, (label, key)) in controls_formatted.iter().enumerate() {
         if i < btn_layout.len() {
             let btn_text = Line::from(vec![
                 Span::styled(
-                    format!(" {}", label),
+                    *label,
                     Style::default()
                         .fg(theme.primary)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(format!(" [{}] ", key), Style::default().fg(theme.dim)),
+                Span::styled(*key, Style::default().fg(theme.dim)),
             ]);
 
             let mut btn_block = Block::default()
