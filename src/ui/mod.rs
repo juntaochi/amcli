@@ -111,9 +111,20 @@ pub const THEMES: &[Theme] = &[
     THEME_TERMINAL_CLEAN,
 ];
 
+#[derive(Default, Clone)]
+pub struct MetadataCache {
+    pub name: String,
+    pub artist: String,
+    pub album: String,
+    pub duration_str: String,
+    pub gauge_label: String,
+    pub progress_percent: u16,
+}
+
 pub struct App {
     player: Box<dyn MediaPlayer>,
     current_track: Option<Track>,
+    pub metadata_cache: Option<MetadataCache>,
     volume: u8,
     saved_volume: u8,
     is_muted: bool,
@@ -199,6 +210,7 @@ impl App {
             lyrics_task: None,
             config,
             settings_menu,
+            metadata_cache: None,
         })
     }
 
@@ -266,6 +278,7 @@ impl App {
     pub fn navigate_left(&mut self) {}
     pub fn navigate_right(&mut self) {}
 
+    #[allow(dead_code)]
     pub async fn toggle_shuffle(&mut self) -> Result<()> {
         self.player.set_shuffle(true).await
     }
@@ -419,6 +432,36 @@ impl App {
         }
 
         self.current_track = new_track;
+
+        if let Some(ref track) = self.current_track {
+            let mut cache = self.metadata_cache.take().unwrap_or_default();
+            if track_changed {
+                cache.name = track.name.to_uppercase();
+                cache.artist = track.artist.to_uppercase();
+                cache.album = track.album.to_uppercase();
+            }
+            let progress_percent = if track.duration.as_secs() > 0 {
+                ((track.position.as_secs_f64() / track.duration.as_secs_f64()) * 100.0) as u16
+            } else {
+                0
+            };
+            cache.duration_str = format!(
+                "{} / {}",
+                format_duration(track.position),
+                format_duration(track.duration)
+            );
+            cache.gauge_label = format!(
+                " {}/{} | {:02}% ",
+                format_duration_seconds(track.position),
+                format_duration_seconds(track.duration),
+                progress_percent
+            );
+            cache.progress_percent = progress_percent;
+            self.metadata_cache = Some(cache);
+        } else {
+            self.metadata_cache = None;
+        }
+
         self.throbber_state.calc_next();
         self.animation_frame = self.animation_frame.wrapping_add(1);
         if artwork_url != self.current_artwork_url {
@@ -722,7 +765,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         (info_chunk, ratatui::layout::Rect::default())
     };
 
-    if let Some(track) = app.get_current_track() {
+    if let (Some(_track), Some(_cache)) = (app.get_current_track(), &app.metadata_cache) {
+        // Bolt ⚡ Optimization:
+        // We use the pre-calculated, formatted strings from our `MetadataCache`
+        // to avoid heavy allocations (e.g. format!, to_uppercase()) during
+        // the hot `draw` loop (running ~20x per second).
         let status_text = if is_jp {
             "動作状態: "
         } else {
@@ -754,14 +801,10 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         };
 
         let values = [
-            track.name.to_uppercase(),
-            track.artist.to_uppercase(),
-            track.album.to_uppercase(),
-            format!(
-                "{} / {}",
-                format_duration(track.position),
-                format_duration(track.duration)
-            ),
+            _cache.name.as_str(),
+            _cache.artist.as_str(),
+            _cache.album.as_str(),
+            _cache.duration_str.as_str(),
         ];
 
         let _available_height = metadata_area.height as usize;
@@ -801,7 +844,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                             .add_modifier(Modifier::ITALIC),
                     )));
 
-                    let display_val = scroll_text(&values[i], col_width, app.animation_frame);
+                    let display_val = scroll_text(values[i], col_width, app.animation_frame);
 
                     lines.push(Line::from(Span::styled(
                         format!(" {} ", display_val),
@@ -837,7 +880,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         .add_modifier(Modifier::ITALIC),
                 )));
 
-                let display_val = scroll_text(&values[i], col_width, app.animation_frame);
+                let display_val = scroll_text(values[i], col_width, app.animation_frame);
 
                 lines.push(Line::from(Span::styled(
                     format!(" {} ", display_val),
@@ -886,19 +929,12 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         f.render_widget(idle_p, info_chunk);
     }
 
-    if let Some(track) = app.get_current_track() {
-        let progress_percent = if track.duration.as_secs() > 0 {
-            ((track.position.as_secs_f64() / track.duration.as_secs_f64()) * 100.0) as u16
-        } else {
-            0
-        };
-
-        let label = format!(
-            " {}/{} | {:02}% ",
-            format_duration_seconds(track.position),
-            format_duration_seconds(track.duration),
-            progress_percent
-        );
+    if let (Some(_track), Some(_cache)) = (app.get_current_track(), &app.metadata_cache) {
+        // Bolt ⚡ Optimization:
+        // Use the pre-computed `progress_percent` and `gauge_label` from
+        // the cache to skip re-calculating formatting strings on every draw tick.
+        let progress_percent = _cache.progress_percent;
+        let label = _cache.gauge_label.as_str();
 
         let gauge = Gauge::default()
             .block(
