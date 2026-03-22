@@ -27,16 +27,23 @@ impl CommandRunner for OsascriptRunner {
     }
 }
 
+use lru::LruCache;
+use std::collections::HashSet;
+use std::num::NonZeroUsize;
+use std::sync::{Arc, Mutex};
+
 pub struct AppleMusicController {
     runner: Box<dyn CommandRunner>,
-    artwork_cache: std::sync::Mutex<Option<(String, Option<String>)>>,
+    artwork_cache: Arc<Mutex<LruCache<String, Option<String>>>>,
+    fetching_artwork: Arc<Mutex<HashSet<String>>>,
 }
 
 impl AppleMusicController {
     pub fn new() -> Self {
         Self {
             runner: Box::new(OsascriptRunner),
-            artwork_cache: std::sync::Mutex::new(None),
+            artwork_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(20).unwrap()))),
+            fetching_artwork: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -44,7 +51,8 @@ impl AppleMusicController {
     pub fn with_runner(runner: Box<dyn CommandRunner>) -> Self {
         Self {
             runner,
-            artwork_cache: std::sync::Mutex::new(None),
+            artwork_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(20).unwrap()))),
+            fetching_artwork: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -199,12 +207,20 @@ impl MediaPlayer for AppleMusicController {
         let track_key = format!("{}|{}", track.artist, track.name);
 
         // Check cache
-        if let Ok(cache) = self.artwork_cache.lock() {
-            if let Some((key, url)) = &*cache {
-                if key == &track_key {
-                    return Ok(url.clone());
-                }
+        if let Ok(mut cache) = self.artwork_cache.lock() {
+            if let Some(url) = cache.get(&track_key) {
+                return Ok(url.clone());
             }
+        }
+
+        // Check if already fetching
+        if let Ok(mut fetching) = self.fetching_artwork.lock() {
+            if fetching.contains(&track_key) {
+                return Ok(None);
+            }
+            fetching.insert(track_key.clone());
+        } else {
+            return Ok(None);
         }
 
         let query = format!("{} {}", track.artist, track.name);
@@ -213,22 +229,38 @@ impl MediaPlayer for AppleMusicController {
             urlencoding::encode(&query)
         );
 
-        let timeout_duration = std::time::Duration::from_secs(3);
-        let response = tokio::time::timeout(timeout_duration, reqwest::get(url)).await??;
+        let cache_clone = Arc::clone(&self.artwork_cache);
+        let fetching_clone = Arc::clone(&self.fetching_artwork);
 
-        let json =
-            tokio::time::timeout(timeout_duration, response.json::<serde_json::Value>()).await??;
+        tokio::spawn(async move {
+            let timeout_duration = std::time::Duration::from_secs(3);
+            let mut artwork_url = None;
 
-        let artwork_url = json["results"][0]["artworkUrl100"]
-            .as_str()
-            .map(|s| s.replace("100x100bb", "600x600bb"));
+            if let Ok(Ok(response)) =
+                tokio::time::timeout(timeout_duration, reqwest::get(url)).await
+            {
+                if let Ok(Ok(json)) =
+                    tokio::time::timeout(timeout_duration, response.json::<serde_json::Value>())
+                        .await
+                {
+                    artwork_url = json["results"][0]["artworkUrl100"]
+                        .as_str()
+                        .map(|s| s.replace("100x100bb", "600x600bb"));
+                }
+            }
 
-        // Update cache
-        if let Ok(mut cache) = self.artwork_cache.lock() {
-            *cache = Some((track_key, artwork_url.clone()));
-        }
+            // Update cache
+            if let Ok(mut cache) = cache_clone.lock() {
+                cache.put(track_key.clone(), artwork_url);
+            }
 
-        Ok(artwork_url)
+            // Remove from fetching
+            if let Ok(mut fetching) = fetching_clone.lock() {
+                fetching.remove(&track_key);
+            }
+        });
+
+        Ok(None)
     }
 }
 
