@@ -27,10 +27,22 @@ struct Args {
     config: Option<String>,
 }
 
+fn restore_terminal() {
+    let _ = disable_raw_mode();
+    let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let _args = Args::parse();
     tracing_subscriber::fmt::init();
+
+    // Ensure terminal is restored even on panic
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        restore_terminal();
+        default_hook(info);
+    }));
 
     // Setup terminal
     enable_raw_mode()?;
@@ -44,12 +56,7 @@ async fn main() -> Result<()> {
     let res = run_app(&mut terminal, app).await;
 
     // Restore terminal
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
+    restore_terminal();
     terminal.show_cursor()?;
 
     if let Err(err) = res {

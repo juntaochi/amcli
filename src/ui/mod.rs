@@ -393,13 +393,22 @@ impl App {
 
         let (new_track, new_volume) = match status {
             Ok(s) => (s.track, s.volume),
-            Err(_) => (None, None),
+            Err(e) => {
+                tracing::warn!("Failed to get player status: {}", e);
+                (None, None)
+            }
         };
 
         self.volume = new_volume.unwrap_or(self.volume);
 
         let artwork_url = if let Some(ref track) = new_track {
-            self.player.get_artwork_url(track).await.ok().flatten()
+            match self.player.get_artwork_url(track).await {
+                Ok(url) => url,
+                Err(e) => {
+                    tracing::debug!("Failed to fetch artwork URL: {}", e);
+                    None
+                }
+            }
         } else {
             None
         };
@@ -428,8 +437,11 @@ impl App {
         if let Some(task) = &mut self.lyrics_task {
             if task.is_finished() {
                 if let Some(task) = self.lyrics_task.take() {
-                    if let Ok(Ok(Some(lyrics))) = task.await {
-                        self.current_lyrics = Some(lyrics);
+                    match task.await {
+                        Ok(Ok(Some(lyrics))) => self.current_lyrics = Some(lyrics),
+                        Ok(Ok(None)) => {}
+                        Ok(Err(e)) => tracing::debug!("Lyrics fetch failed: {}", e),
+                        Err(e) => tracing::warn!("Lyrics task panicked: {}", e),
                     }
                 }
             }
@@ -520,8 +532,13 @@ impl App {
         if let Some(task) = &mut self.artwork_task {
             if task.is_finished() {
                 if let Some(task) = self.artwork_task.take() {
-                    if let Ok(Ok(img)) = task.await {
-                        self.artwork_protocol = Some(self.artwork_converter.create_protocol(img));
+                    match task.await {
+                        Ok(Ok(img)) => {
+                            self.artwork_protocol =
+                                Some(self.artwork_converter.create_protocol(img));
+                        }
+                        Ok(Err(e)) => tracing::debug!("Artwork load failed: {}", e),
+                        Err(e) => tracing::warn!("Artwork task panicked: {}", e),
                     }
                 }
                 self.is_loading_artwork = false;

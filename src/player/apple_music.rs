@@ -40,7 +40,9 @@ impl AppleMusicController {
     pub fn new() -> Self {
         Self {
             runner: Box::new(OsascriptRunner),
-            artwork_cache: Mutex::new(LruCache::new(NonZeroUsize::new(20).unwrap())),
+            artwork_cache: Mutex::new(LruCache::new(
+                NonZeroUsize::new(20).expect("cache capacity must be non-zero"),
+            )),
         }
     }
 
@@ -48,7 +50,9 @@ impl AppleMusicController {
     pub fn with_runner(runner: Box<dyn CommandRunner>) -> Self {
         Self {
             runner,
-            artwork_cache: Mutex::new(LruCache::new(NonZeroUsize::new(20).unwrap())),
+            artwork_cache: Mutex::new(LruCache::new(
+                NonZeroUsize::new(20).expect("cache capacity must be non-zero"),
+            )),
         }
     }
 
@@ -259,8 +263,9 @@ impl MediaPlayer for AppleMusicController {
     async fn get_artwork_url(&self, track: &Track) -> Result<Option<String>> {
         let track_key = format!("{}|{}", track.artist, track.name);
 
-        // Check LRU cache first
-        if let Ok(mut cache) = self.artwork_cache.lock() {
+        // Check LRU cache first (recover from poison — cache data is not critical)
+        {
+            let mut cache = self.artwork_cache.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(url) = cache.get(&track_key) {
                 return Ok(url.clone());
             }
@@ -281,10 +286,9 @@ impl MediaPlayer for AppleMusicController {
             .as_str()
             .map(|s| s.replace("100x100bb", "600x600bb"));
 
-        // Update LRU cache
-        if let Ok(mut cache) = self.artwork_cache.lock() {
-            cache.put(track_key, artwork_url.clone());
-        }
+        // Update LRU cache (recover from poison — cache data is not critical)
+        let mut cache = self.artwork_cache.lock().unwrap_or_else(|e| e.into_inner());
+        cache.put(track_key, artwork_url.clone());
 
         Ok(artwork_url)
     }

@@ -24,13 +24,14 @@ impl ArtworkCache {
         Self {
             cache_dir,
             memory_cache: Arc::new(Mutex::new(LruCache::new(
-                NonZeroUsize::new(capacity).unwrap(),
+                NonZeroUsize::new(capacity).expect("cache capacity must be non-zero"),
             ))),
         }
     }
 
     pub async fn get(&self, url: &str) -> Option<DynamicImage> {
-        if let Ok(mut cache) = self.memory_cache.lock() {
+        {
+            let mut cache = self.memory_cache.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(img) = cache.get(url) {
                 return Some(img.clone());
             }
@@ -43,9 +44,8 @@ impl ArtworkCache {
             let path_clone = path.clone();
             if let Ok(Ok(img)) = tokio::task::spawn_blocking(move || image::open(path_clone)).await
             {
-                if let Ok(mut cache) = self.memory_cache.lock() {
-                    cache.put(url.to_string(), img.clone());
-                }
+                let mut cache = self.memory_cache.lock().unwrap_or_else(|e| e.into_inner());
+                cache.put(url.to_string(), img.clone());
                 return Some(img);
             }
         }
@@ -73,9 +73,8 @@ impl ArtworkCache {
         .await
         .ok();
 
-        if let Ok(mut cache) = self.memory_cache.lock() {
-            cache.put(url, img);
-        }
+        let mut cache = self.memory_cache.lock().unwrap_or_else(|e| e.into_inner());
+        cache.put(url, img);
     }
 
     fn hash_url(&self, url: &str) -> String {
