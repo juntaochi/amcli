@@ -1,6 +1,7 @@
 use anyhow::Result;
 use image::DynamicImage;
-use ratatui_image::{picker::Picker, protocol::StatefulProtocol};
+use ratatui_image::picker::Picker;
+use ratatui_image::protocol::StatefulProtocol;
 
 pub struct ArtworkConverter {
     picker: Picker,
@@ -8,22 +9,27 @@ pub struct ArtworkConverter {
 
 impl ArtworkConverter {
     pub fn with_mode(mode: &str) -> Result<Self> {
-        // "auto" tries to query the active terminal; fall back to halfblocks for maximum
-        // compatibility.
-        let picker = match mode {
-            // Keep accepting historical values like "kitty"/"iterm2"/"sixel" in config;
-            // with our current feature set we rely on auto-detection.
-            "auto" | "kitty" | "iterm2" | "sixel" => {
+        let is_zellij = std::env::var("ZELLIJ").is_ok();
+
+        let picker = match mode.to_lowercase().as_str() {
+            "halfblocks" => Picker::halfblocks(),
+            "sixel" => {
+                // Try and query for sixel, fallback to halfblocks but try to be high-res
                 Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks())
             }
-            "halfblocks" => Picker::halfblocks(),
-            _ => Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks()),
+            _ => {
+                if is_zellij && (mode == "auto" || mode.is_empty()) {
+                    Picker::halfblocks()
+                } else {
+                    // Modern terminals: query for best protocol and font-size
+                    Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks())
+                }
+            }
         };
-
         Ok(Self { picker })
     }
 
-    pub fn create_protocol(&self, img: DynamicImage) -> StatefulProtocol {
+    pub fn create_protocol(&mut self, img: DynamicImage) -> StatefulProtocol {
         self.picker.new_resize_protocol(img)
     }
 }

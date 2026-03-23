@@ -68,7 +68,7 @@ pub fn parse_lrc(content: &str) -> Result<Lyrics> {
     lyrics.lines.sort_by_key(|l| l.timestamp);
 
     if lyrics.offset != 0 {
-        let offset_dur = Duration::from_millis(lyrics.offset.abs() as u64);
+        let offset_dur = Duration::from_millis(lyrics.offset.unsigned_abs());
         for line in lyrics.lines.iter_mut() {
             if lyrics.offset > 0 {
                 line.timestamp += offset_dur;

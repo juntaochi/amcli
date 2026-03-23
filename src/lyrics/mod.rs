@@ -1,42 +1,121 @@
 use crate::player::Track;
 use anyhow::Result;
+use lru::LruCache;
+use std::collections::HashMap;
+use std::num::NonZeroUsize;
+use std::sync::Mutex;
 use std::time::Duration;
 
 pub mod local;
 pub mod lrclib;
 pub mod netease;
+pub mod parser;
+pub mod provider;
 
 #[derive(Clone, Debug)]
 pub struct LyricLine {
     pub text: String,
-    #[allow(dead_code)]
     pub timestamp: Duration,
 }
 
 #[derive(Clone, Debug)]
 pub struct Lyrics {
     pub lines: Vec<LyricLine>,
+    pub metadata: HashMap<String, String>,
+    pub offset: i64,
 }
 
 impl Lyrics {
-    pub fn find_index(&self, _position: Duration) -> usize {
-        0
+    pub fn new() -> Self {
+        Self {
+            lines: Vec::new(),
+            metadata: HashMap::new(),
+            offset: 0,
+        }
+    }
+
+    pub fn find_index(&self, position: Duration) -> usize {
+        let mut idx = 0;
+        for (i, line) in self.lines.iter().enumerate() {
+            if line.timestamp <= position {
+                idx = i;
+            } else {
+                break;
+            }
+        }
+        idx
     }
 }
 
-pub trait LyricsProvider: Send + Sync {}
-
 #[derive(Clone)]
-pub struct LyricsManager;
+pub struct LyricsManager {
+    providers: Vec<std::sync::Arc<dyn provider::LyricsProvider>>,
+    cache: std::sync::Arc<Mutex<LruCache<String, Option<Lyrics>>>>,
+}
 
 impl LyricsManager {
-    pub fn new(_capacity: usize) -> Self {
-        Self
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            providers: Vec::new(),
+            cache: std::sync::Arc::new(Mutex::new(LruCache::new(
+                NonZeroUsize::new(capacity).expect("lyrics cache capacity must be non-zero"),
+            ))),
+        }
     }
 
-    pub fn add_provider(&mut self, _provider: Box<dyn LyricsProvider>) {}
+    pub fn add_provider(&mut self, provider: Box<dyn provider::LyricsProvider>) {
+        self.providers.push(std::sync::Arc::from(provider));
+    }
 
-    pub async fn get_lyrics(&self, _track: &Track) -> Result<Option<Lyrics>> {
+    pub async fn get_lyrics(&self, track: &Track) -> Result<Option<Lyrics>> {
+        let cache_key = format!("{}|{}", track.artist, track.name);
+
+        // Check cache
+        if let Ok(mut cache) = self.cache.lock() {
+            if let Some(cached) = cache.get(&cache_key) {
+                tracing::debug!("Lyrics cache hit for: {} - {}", track.name, track.artist);
+                return Ok(cached.clone());
+            }
+        }
+
+        tracing::debug!(
+            "Lyrics cache miss, querying providers for: {} - {}",
+            track.name,
+            track.artist
+        );
+
+        // Try each provider in priority order
+        let mut sorted_providers: Vec<_> = self.providers.iter().collect();
+        sorted_providers.sort_by_key(|p| p.priority());
+
+        for provider in sorted_providers {
+            match tokio::time::timeout(Duration::from_secs(5), provider.get_lyrics(track)).await {
+                Ok(Ok(Some(lyrics))) if !lyrics.lines.is_empty() => {
+                    tracing::debug!("Lyrics found via provider: {}", provider.name());
+                    if let Ok(mut cache) = self.cache.lock() {
+                        cache.put(cache_key, Some(lyrics.clone()));
+                    }
+                    return Ok(Some(lyrics));
+                }
+                Ok(Ok(_)) => {
+                    tracing::debug!("Provider {} returned no lyrics", provider.name());
+                    continue;
+                }
+                Ok(Err(e)) => {
+                    tracing::debug!("Provider {} failed: {}", provider.name(), e);
+                    continue;
+                }
+                Err(_) => {
+                    tracing::debug!("Provider {} timed out after 2s", provider.name());
+                    continue;
+                }
+            }
+        }
+
+        tracing::debug!("No lyrics found for: {} - {}", track.name, track.artist);
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.put(cache_key, None);
+        }
         Ok(None)
     }
 }

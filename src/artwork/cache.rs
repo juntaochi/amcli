@@ -29,7 +29,21 @@ impl ArtworkCache {
         }
     }
 
-    pub async fn get(&self, url: &str) -> Option<DynamicImage> {
+    /// Synchronous memory-only cache lookup
+    pub fn get(&self, url: &str) -> Option<DynamicImage> {
+        let mut cache = self.memory_cache.lock().unwrap_or_else(|e| e.into_inner());
+        cache.get(url).cloned()
+    }
+
+    /// Synchronous memory-only cache insert
+    pub fn insert(&self, url: String, img: DynamicImage) {
+        let mut cache = self.memory_cache.lock().unwrap_or_else(|e| e.into_inner());
+        cache.put(url, img);
+    }
+
+    /// Async cache lookup with disk fallback
+    #[allow(dead_code)]
+    pub async fn get_async(&self, url: &str) -> Option<DynamicImage> {
         {
             let mut cache = self.memory_cache.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(img) = cache.get(url) {
@@ -53,7 +67,8 @@ impl ArtworkCache {
         None
     }
 
-    pub async fn insert(&self, url: String, img: DynamicImage) {
+    #[allow(dead_code)]
+    pub async fn insert_async(&self, url: String, img: DynamicImage) {
         let hash = self.hash_url(&url);
         let path = self.cache_dir.join(format!("{}.png", hash));
 

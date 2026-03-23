@@ -392,9 +392,16 @@ impl App {
         let status = self.player.get_player_status().await;
 
         let (new_track, new_volume) = match status {
-            Ok(s) => (s.track, s.volume),
+            Ok(s) => {
+                tracing::debug!(
+                    "[UPDATE] status OK: track={}, vol={:?}",
+                    s.track.as_ref().map(|t| t.name.as_str()).unwrap_or("None"),
+                    s.volume
+                );
+                (s.track, s.volume)
+            }
             Err(e) => {
-                tracing::warn!("Failed to get player status: {}", e);
+                tracing::warn!("[UPDATE] get_player_status FAILED: {}", e);
                 (None, None)
             }
         };
@@ -403,9 +410,12 @@ impl App {
 
         let artwork_url = if let Some(ref track) = new_track {
             match self.player.get_artwork_url(track).await {
-                Ok(url) => url,
+                Ok(url) => {
+                    tracing::debug!("[UPDATE] artwork_url={:?}", url);
+                    url
+                }
                 Err(e) => {
-                    tracing::debug!("Failed to fetch artwork URL: {}", e);
+                    tracing::debug!("[UPDATE] artwork fetch FAILED: {}", e);
                     None
                 }
             }
@@ -418,6 +428,12 @@ impl App {
             (None, Some(_)) => true,
             _ => false,
         };
+        tracing::debug!(
+            "[UPDATE] track_changed={}, has_lyrics={}, artwork_changed={}",
+            track_changed,
+            self.current_lyrics.is_some(),
+            artwork_url != self.current_artwork_url
+        );
 
         if track_changed {
             self.current_lyrics = None;
