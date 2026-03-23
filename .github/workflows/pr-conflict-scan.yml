@@ -1,0 +1,120 @@
+name: PR Conflict Scanner
+
+# Runs daily and on manual trigger
+# Removed push-to-main trigger to avoid expensive scans after every merge
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: pr-conflict-scan
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  scan-conflicts:
+    name: Scan PR Conflicts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan open PRs for conflicts and overlaps
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          echo "## PR Conflict Scan Report" > report.md
+          echo "" >> report.md
+          echo "Generated: $(date -u '+%Y-%m-%d %H:%M UTC')" >> report.md
+          echo "" >> report.md
+
+          # All PR data comes from gh CLI, not from untrusted event context
+          prs=$(gh pr list --base main --state open --json number,title,headRefName --limit 50)
+          pr_count=$(echo "$prs" | jq length)
+
+          if [ "$pr_count" -eq 0 ]; then
+            echo "No open PRs found."
+            echo "No open PRs." >> report.md
+            exit 0
+          fi
+
+          echo "Found $pr_count open PRs"
+
+          # Bulk fetch all remote branches once (avoids O(n^2) fetches)
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*' --prune
+
+          echo "| PR | Status | Overlapping PRs | Changed Files |" >> report.md
+          echo "|---|---|---|---|" >> report.md
+
+          # Pre-compute changed files for each PR (avoids redundant diffs)
+          declare -A pr_file_cache
+          for i in $(seq 0 $((pr_count - 1))); do
+            head_ref=$(echo "$prs" | jq -r ".[$i].headRefName")
+            pr_number=$(echo "$prs" | jq -r ".[$i].number")
+            pr_file_cache[$pr_number]=$(git diff --name-only "origin/main...origin/${head_ref}" 2>/dev/null | sort | tr '\n' '|' || echo "")
+          done
+
+          for i in $(seq 0 $((pr_count - 1))); do
+            pr_number=$(echo "$prs" | jq -r ".[$i].number")
+            head_ref=$(echo "$prs" | jq -r ".[$i].headRefName")
+
+            echo "Checking PR #${pr_number}..."
+
+            changed_files=$(echo "${pr_file_cache[$pr_number]}" | tr '|' ',' | head -c 200)
+
+            # Test merge against main using detached HEAD
+            git checkout --detach origin/main 2>/dev/null
+            if git merge --no-commit --no-ff "origin/${head_ref}" 2>/dev/null; then
+              git merge --abort 2>/dev/null || git reset --hard origin/main
+
+              # Check for file overlap with other PRs using cached file lists
+              overlaps=""
+              pr_files="${pr_file_cache[$pr_number]}"
+
+              for j in $(seq 0 $((pr_count - 1))); do
+                if [ "$i" -eq "$j" ]; then continue; fi
+                other_number=$(echo "$prs" | jq -r ".[$j].number")
+                other_files="${pr_file_cache[$other_number]}"
+
+                common=$(comm -12 \
+                  <(echo "$pr_files" | tr '|' '\n' | grep -v '^$' | sort) \
+                  <(echo "$other_files" | tr '|' '\n' | grep -v '^$' | sort) \
+                  2>/dev/null | head -5)
+                if [ -n "$common" ]; then
+                  overlaps="${overlaps} #${other_number}"
+                fi
+              done
+
+              if [ -n "$overlaps" ]; then
+                echo "| #${pr_number} | mergeable (overlaps) |${overlaps} | ${changed_files} |" >> report.md
+              else
+                echo "| #${pr_number} | clean | - | ${changed_files} |" >> report.md
+              fi
+            else
+              git merge --abort 2>/dev/null || git reset --hard origin/main
+              echo "| #${pr_number} | **CONFLICT** | - | ${changed_files} |" >> report.md
+              gh pr edit "$pr_number" --add-label "conflict" 2>/dev/null || true
+            fi
+          done
+
+          echo "" >> report.md
+          cat report.md
+
+          # Update or create a tracking issue
+          existing=$(gh issue list --label "pr-scan" --state open --json number --limit 1 | jq -r '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file report.md
+          else
+            gh issue create \
+              --title "PR Conflict Scan Report" \
+              --label "pr-scan" \
+              --body-file report.md
+          fi

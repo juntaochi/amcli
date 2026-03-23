@@ -1,0 +1,102 @@
+name: PR Validate & Auto-Merge
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+
+concurrency:
+  group: pr-validate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Test the MERGED result, not just the PR branch
+  # This catches conflicts and integration issues that branch-only CI misses
+  merge-test:
+    name: Test Merged Result
+    runs-on: macos-latest
+    env:
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.base.ref }}
+
+      - name: Merge PR into base
+        id: merge
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$PR_HEAD_SHA"
+          if git merge --no-edit "$PR_HEAD_SHA"; then
+            echo "mergeable=true" >> "$GITHUB_OUTPUT"
+            echo "Merge successful - testing merged result"
+          else
+            echo "mergeable=false" >> "$GITHUB_OUTPUT"
+            echo "::error::Merge conflict detected!"
+            git merge --abort
+            exit 1
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.merge.outputs.mergeable == 'true'
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        if: steps.merge.outputs.mergeable == 'true'
+
+      - name: Check
+        if: steps.merge.outputs.mergeable == 'true'
+        run: cargo check --all-features
+
+      - name: Format check
+        if: steps.merge.outputs.mergeable == 'true'
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        if: steps.merge.outputs.mergeable == 'true'
+        run: cargo clippy --all-features -- -D warnings
+
+      - name: Test
+        if: steps.merge.outputs.mergeable == 'true'
+        run: cargo test --all-features
+
+      - name: Build
+        if: steps.merge.outputs.mergeable == 'true'
+        run: cargo build --release --all-features
+
+  # Auto-merge when all checks pass and the PR has the auto-merge label
+  # Requires branch protection with required status checks to be configured
+  auto-merge:
+    name: Auto Merge
+    needs: [merge-test]
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'auto-merge')
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # Safety: do not auto-merge PRs that modify CI/workflow files
+      - name: Check for workflow file changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          files=$(gh pr diff "$PR_NUMBER" --name-only --repo "$REPO" || echo "")
+          if echo "$files" | grep -q '^\.github/'; then
+            echo "::error::PR modifies .github/ files — skipping auto-merge for security"
+            exit 1
+          fi
+
+      - name: Enable auto-merge
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pull-request-number: ${{ github.event.pull_request.number }}
+          merge-method: squash
