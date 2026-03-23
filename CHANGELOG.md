@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-23
+
+### Performance
+- **Batched AppleScript IPC** — Combine player state, volume, and track metadata into a single `osascript` call, halving process overhead during the 500ms UI update loop
+- **LRU artwork cache** — Replace single-entry artwork cache with 20-entry LRU cache, eliminating redundant iTunes API calls when switching between recently played tracks
+- **Zero-allocation draw loop** — Pre-compute uppercase metadata and formatted duration strings in a `MetadataCache`, avoiding `format!`/`to_uppercase()` allocations on every ~50ms draw tick
+- **Cow-based scroll_text** — Return `Cow::Borrowed` when text fits within column width, avoiding heap allocation for non-scrolling text
+
+### Fixed
+- **Artwork display** — Restored synchronous artwork fetch that was broken by an async fire-and-forget pattern which always returned `None` on first call
+- **Lyrics rendering** — Decoupled lyrics display from metadata cache check so lyrics render independently of the optimization cache
+- **Artwork protocol converter** — Fixed panic in artwork protocol conversion
+
+### Added
+- **PR validation workflow** (`pr-validate-merge.yml`) — Tests the merged result against latest `main` (not just the PR branch), with Cargo caching, concurrency groups, and auto-merge support via `auto-merge` label
+- **PR conflict scanner** (`pr-conflict-scan.yml`) — Daily scan of all open PRs for merge conflicts and file overlaps, reports to a tracking GitHub Issue
+- **Local PR triage script** (`scripts/pr-triage.sh`) — Analyzes all open PRs, finds safe sequential merge order, supports `--auto-merge` and `--close-conflicts`
+- **CLAUDE.md** — Project conventions and commands for AI-assisted development
+
 ## [0.1.0] - 2026-01-24
 
 ### Added
@@ -130,5 +149,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/juntaochi/amcli/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/juntaochi/amcli/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/juntaochi/amcli/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/juntaochi/amcli/releases/tag/v0.1.0
