@@ -900,10 +900,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 metadata_area,
             );
         }
-
-        if lyrics_area.height > 2 {
-            draw_lyrics(f, lyrics_area, app);
-        }
     } else {
         let idle_msg = if is_jp {
             "メディア入力待機中..."
@@ -931,6 +927,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             .style(Style::default().fg(theme.dim))
             .block(Block::default().padding(ratatui::widgets::Padding::new(0, 0, 5, 0)));
         f.render_widget(idle_p, info_chunk);
+    }
+
+    // Lyrics rendering — only depends on current_track, not metadata_cache
+    if lyrics_area.height > 2 && app.get_current_track().is_some() {
+        draw_lyrics(f, lyrics_area, app);
     }
 
     if let (Some(_track), Some(_cache)) = (app.get_current_track(), &app.metadata_cache) {
