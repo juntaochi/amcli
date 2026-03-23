@@ -786,11 +786,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         (info_chunk, ratatui::layout::Rect::default())
     };
 
-    if let (Some(_track), Some(_cache)) = (app.get_current_track(), &app.metadata_cache) {
-        // Bolt ⚡ Optimization:
-        // We use the pre-calculated, formatted strings from our `MetadataCache`
-        // to avoid heavy allocations (e.g. format!, to_uppercase()) during
-        // the hot `draw` loop (running ~20x per second).
+    if let Some(track) = app.get_current_track().cloned() {
         let status_text = if is_jp {
             "動作状態: "
         } else {
@@ -822,10 +818,14 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         };
 
         let values = [
-            _cache.name.as_str(),
-            _cache.artist.as_str(),
-            _cache.album.as_str(),
-            _cache.duration_str.as_str(),
+            track.name.to_uppercase(),
+            track.artist.to_uppercase(),
+            track.album.to_uppercase(),
+            format!(
+                "{} / {}",
+                format_duration(track.position),
+                format_duration(track.duration)
+            ),
         ];
 
         let _available_height = metadata_area.height as usize;
@@ -865,7 +865,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                             .add_modifier(Modifier::ITALIC),
                     )));
 
-                    let display_val = scroll_text(values[i], col_width, app.animation_frame);
+                    let display_val = scroll_text(&values[i], col_width, app.animation_frame);
 
                     lines.push(Line::from(Span::styled(
                         format!(" {} ", display_val),
@@ -901,7 +901,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         .add_modifier(Modifier::ITALIC),
                 )));
 
-                let display_val = scroll_text(values[i], col_width, app.animation_frame);
+                let display_val = scroll_text(&values[i], col_width, app.animation_frame);
 
                 lines.push(Line::from(Span::styled(
                     format!(" {} ", display_val),
@@ -951,12 +951,19 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         draw_lyrics(f, lyrics_area, app);
     }
 
-    if let (Some(_track), Some(_cache)) = (app.get_current_track(), &app.metadata_cache) {
-        // Bolt ⚡ Optimization:
-        // Use the pre-computed `progress_percent` and `gauge_label` from
-        // the cache to skip re-calculating formatting strings on every draw tick.
-        let progress_percent = _cache.progress_percent;
-        let label = _cache.gauge_label.as_str();
+    if let Some(track) = app.get_current_track() {
+        let progress_percent = if track.duration.as_secs() > 0 {
+            ((track.position.as_secs_f64() / track.duration.as_secs_f64()) * 100.0) as u16
+        } else {
+            0
+        };
+
+        let label = format!(
+            " {}/{} | {:02}% ",
+            format_duration_seconds(track.position),
+            format_duration_seconds(track.duration),
+            progress_percent
+        );
 
         let gauge = Gauge::default()
             .block(
