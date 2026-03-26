@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Extract leaf section renderers (controls, progress, idle, chassis, screen_border, lyrics narrowing)
+- [x] 01-01-PLAN.md -- Extract leaf section renderers (controls, progress, idle, chassis, screen_border, lyrics narrowing)
 - [ ] 01-02-PLAN.md -- Extract artwork + metadata renderers, finalize draw() orchestrator
 
 ### Phase 2: Proportional Layout & Spacing System

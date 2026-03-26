@@ -8,7 +8,7 @@
 ### Code Structure
 
 - [ ] **STRC-01**: Draw function decomposed into orchestrator + section renderers with narrow data slices
-- [ ] **STRC-02**: Each section renderer is a standalone function receiving Frame, Rect, and relevant state
+- [x] **STRC-02**: Each section renderer is a standalone function receiving Frame, Rect, and relevant state
 
 ### Layout
 
@@ -46,7 +46,7 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | STRC-01 | Phase 1 | Pending |
-| STRC-02 | Phase 1 | Pending |
+| STRC-02 | Phase 1 | Complete |
 | LAYT-01 | Phase 3 | Pending |
 | LAYT-02 | Phase 3 | Pending |
 | LAYT-03 | Phase 2 | Pending |
