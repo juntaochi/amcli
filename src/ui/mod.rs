@@ -648,10 +648,7 @@ fn draw_chassis(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) -> Rect {
                     .bg(Color::Rgb(5, 5, 5))
                     .add_modifier(Modifier::DIM),
             );
-            f.render_widget(
-                line,
-                Rect::new(inner.left(), y, inner.width, 1),
-            );
+            f.render_widget(line, Rect::new(inner.left(), y, inner.width, 1));
         }
         inner
     } else {
