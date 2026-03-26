@@ -753,10 +753,7 @@ fn draw_artwork(
     // Calculate square size that fits in the column with horizontal padding
     let side = area.width.saturating_sub(4); // 2px padding each side
     let char_height = side / 2;
-    let art_rect = area.centered(
-        Constraint::Length(side),
-        Constraint::Length(char_height),
-    );
+    let art_rect = area.centered(Constraint::Length(side), Constraint::Length(char_height));
 
     if is_loading {
         let loader = Throbber::default()
@@ -953,11 +950,7 @@ fn draw_controls(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) {
         ]
     };
 
-    let btn_width = area.width / controls.len() as u16;
-    let btn_layout = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(vec![Constraint::Length(btn_width); controls.len()])
-        .split(area);
+    let btn_layout = Layout::horizontal(vec![Constraint::Fill(1); controls.len()]).split(area);
 
     for (i, (label, key)) in controls.iter().enumerate() {
         if i < btn_layout.len() {
