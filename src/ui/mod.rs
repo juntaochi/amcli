@@ -32,6 +32,13 @@ pub const COLOR_TEXT_BRIGHT: Color = Color::Rgb(255, 176, 0);
 pub const COLOR_ACCENT: Color = Color::Rgb(255, 215, 0);
 pub const COLOR_ALERT: Color = Color::Rgb(255, 50, 50);
 
+// Spacing system: unified constants for layout gaps
+#[allow(dead_code)]
+const SPACING_TIGHT: u16 = 0; // No gap -- adjacent elements touching
+const SPACING_NORMAL: u16 = 1; // 1-cell gap -- between sibling sections
+#[allow(dead_code)]
+const SPACING_SECTION: u16 = 2; // 2-cell gap -- between major sections
+
 #[derive(Debug, Clone, Copy)]
 pub struct Theme {
     pub name: &'static str,
@@ -1006,46 +1013,37 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     f.render_widget(Block::default().style(Style::default().bg(theme.bg)), area);
 
     let chassis_inner = draw_chassis(f, area, theme, is_jp);
-    let main = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(10),
-            Constraint::Length(3),
-            Constraint::Length(3),
-        ])
-        .split(chassis_inner);
-    let (display_area, tuner_area, control_area) = (main[0], main[1], main[2]);
+    let [display_area, tuner_area, control_area] = Layout::vertical([
+        Constraint::Fill(1),
+        Constraint::Length(3),
+        Constraint::Length(3),
+    ])
+    .areas(chassis_inner);
 
     let screen_inner = draw_screen_border(f, display_area, theme);
     let show_artwork = app.config.artwork.album && display_area.width > 50;
-    let artwork_constraints: &[Constraint] = if show_artwork {
-        &[
-            Constraint::Percentage(42),
-            Constraint::Length(1),
-            Constraint::Percentage(57),
-        ]
-    } else {
-        &[Constraint::Percentage(100)]
-    };
-    let content_layout = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(artwork_constraints)
-        .split(screen_inner);
-    if show_artwork {
+    let info_chunk = if show_artwork {
+        let available = screen_inner.width;
+        let artwork_constraints = if available >= 20 + 30 + SPACING_NORMAL {
+            [Constraint::Fill(3), Constraint::Fill(4)]
+        } else {
+            [Constraint::Min(20), Constraint::Fill(1)]
+        };
+        let [artwork_col, info_col] = Layout::horizontal(artwork_constraints)
+            .spacing(SPACING_NORMAL)
+            .areas(screen_inner);
         draw_artwork(
             f,
-            content_layout[0],
+            artwork_col,
             app.artwork_protocol.as_mut(),
             app.is_loading_artwork,
             &mut app.throbber_state,
             theme,
             is_jp,
         );
-    }
-    let info_chunk = if show_artwork {
-        content_layout[2]
+        info_col
     } else {
-        content_layout[0]
+        screen_inner
     };
     let has_lyrics = app.current_lyrics.is_some();
     let info_height = info_chunk.height as usize;
