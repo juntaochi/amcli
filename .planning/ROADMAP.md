@@ -59,7 +59,7 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 03-01-PLAN.md -- Center artwork with Rect::centered(), distribute buttons with Fill(1)
+- [x] 03-01-PLAN.md -- Center artwork with Rect::centered(), distribute buttons with Fill(1)
 - [ ] 03-02-PLAN.md -- Align metadata columns, add 3-tier graduated lyrics dimming
 
 ## Progress

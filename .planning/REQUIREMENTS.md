@@ -12,8 +12,8 @@
 
 ### Layout
 
-- [ ] **LAYT-01**: Artwork vertically centered in its available area using Ratatui centering APIs
-- [ ] **LAYT-02**: Control buttons evenly distributed across terminal width at any size using Flex layout
+- [x] **LAYT-01**: Artwork vertically centered in its available area using Ratatui centering APIs
+- [x] **LAYT-02**: Control buttons evenly distributed across terminal width at any size using Flex layout
 - [x] **LAYT-03**: Layout uses proportional Fill constraints instead of percentage-based splits that leave gaps
 - [x] **LAYT-04**: Artwork/info split ratio adapts to terminal width using Min/Max constraints
 
@@ -47,8 +47,8 @@
 |-------------|-------|--------|
 | STRC-01 | Phase 1 | Complete |
 | STRC-02 | Phase 1 | Complete |
-| LAYT-01 | Phase 3 | Pending |
-| LAYT-02 | Phase 3 | Pending |
+| LAYT-01 | Phase 3 | Complete |
+| LAYT-02 | Phase 3 | Complete |
 | LAYT-03 | Phase 2 | Complete |
 | LAYT-04 | Phase 2 | Complete |
 | VISL-01 | Phase 2 | Complete |
