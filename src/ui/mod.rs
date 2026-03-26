@@ -1,7 +1,7 @@
 use anyhow::Result;
 use image::DynamicImage;
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Gauge, Paragraph},
@@ -564,7 +564,7 @@ impl App {
     }
 }
 
-pub fn draw_lyrics(f: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+pub fn draw_lyrics(f: &mut Frame, area: Rect, app: &App) {
     let theme = app.current_theme();
     let track = match app.get_current_track() {
         Some(t) => t,
@@ -612,6 +612,134 @@ pub fn draw_lyrics(f: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .scroll((scroll, 0));
 
     f.render_widget(p, area);
+}
+
+fn draw_idle(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) {
+    let idle_msg = if is_jp {
+        "メディア入力待機中..."
+    } else {
+        "WAITING FOR MEDIA INPUT..."
+    };
+    let insert_msg = if is_jp {
+        "テープまたはディスクを挿入してください"
+    } else {
+        "INSERT TAPE OR DISC"
+    };
+    let idle_text = vec![
+        Line::from(""),
+        Line::from(idle_msg),
+        Line::from(""),
+        Line::from(Span::styled(
+            insert_msg,
+            Style::default()
+                .fg(theme.alert)
+                .add_modifier(Modifier::SLOW_BLINK),
+        )),
+    ];
+    let idle_p = Paragraph::new(idle_text)
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(theme.dim))
+        .block(Block::default().padding(ratatui::widgets::Padding::new(0, 0, 5, 0)));
+    f.render_widget(idle_p, area);
+}
+
+fn draw_progress(f: &mut Frame, area: Rect, track: &Track, theme: Theme) {
+    let progress_percent = if track.duration.as_secs() > 0 {
+        ((track.position.as_secs_f64() / track.duration.as_secs_f64()) * 100.0) as u16
+    } else {
+        0
+    };
+
+    let label = format!(
+        " {}/{} | {:02}% ",
+        format_duration_seconds(track.position),
+        format_duration_seconds(track.duration),
+        progress_percent
+    );
+
+    let gauge = Gauge::default()
+        .block(
+            Block::default()
+                .borders(Borders::TOP | Borders::BOTTOM)
+                .border_style(Style::default().fg(theme.dim))
+                .title(vec![
+                    Span::styled(" [ ", Style::default().fg(theme.dim)),
+                    Span::styled(label, Style::default().fg(theme.dim)),
+                    Span::styled(" ] ", Style::default().fg(theme.dim)),
+                ]),
+        )
+        .gauge_style(Style::default().fg(theme.primary).bg(if theme.is_retro {
+            Color::Rgb(15, 15, 15)
+        } else {
+            theme.dim
+        }))
+        .percent(progress_percent.min(100))
+        .label("");
+
+    f.render_widget(gauge, area);
+}
+
+fn draw_controls(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) {
+    let controls = if is_jp {
+        vec![
+            ("▶再生", "SPC"),
+            ("▶▶次", "]"),
+            ("◀◀前", "["),
+            ("音量＋", "+"),
+            ("音量－", "-"),
+            ("消音", "m"),
+            ("電源", "q"),
+        ]
+    } else {
+        vec![
+            ("PLAY", "SPC"),
+            ("SKIP", "]"),
+            ("PREV", "["),
+            ("VOL+", "+"),
+            ("VOL-", "-"),
+            ("MUTE", "m"),
+            ("EXIT", "q"),
+        ]
+    };
+
+    let btn_width = area.width / controls.len() as u16;
+    let btn_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(vec![Constraint::Length(btn_width); controls.len()])
+        .split(area);
+
+    for (i, (label, key)) in controls.iter().enumerate() {
+        if i < btn_layout.len() {
+            let btn_text = Line::from(vec![
+                Span::styled(
+                    format!(" {}", label),
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(format!(" [{}] ", key), Style::default().fg(theme.dim)),
+            ]);
+
+            let mut btn_block = Block::default()
+                .borders(Borders::ALL)
+                .border_type(if theme.is_retro {
+                    BorderType::Thick
+                } else {
+                    BorderType::Plain
+                })
+                .border_style(Style::default().fg(theme.dim));
+
+            if theme.is_retro {
+                btn_block = btn_block.bg(Color::Rgb(10, 10, 10));
+            }
+
+            let btn = Paragraph::new(btn_text)
+                .alignment(Alignment::Center)
+                .block(btn_block);
+
+            f.render_widget(btn, btn_layout[i]);
+        }
+    }
 }
 
 pub fn draw(f: &mut Frame, app: &mut App) {
@@ -662,7 +790,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             );
             f.render_widget(
                 line,
-                ratatui::layout::Rect::new(inner.left(), y, inner.width, 1),
+                Rect::new(inner.left(), y, inner.width, 1),
             );
         }
         inner
@@ -799,7 +927,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             .split(info_chunk);
         (parts[0], parts[1])
     } else {
-        (info_chunk, ratatui::layout::Rect::default())
+        (info_chunk, Rect::default())
     };
 
     if let Some(track) = app.get_current_track().cloned() {
@@ -934,32 +1062,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             );
         }
     } else {
-        let idle_msg = if is_jp {
-            "メディア入力待機中..."
-        } else {
-            "WAITING FOR MEDIA INPUT..."
-        };
-        let insert_msg = if is_jp {
-            "テープまたはディスクを挿入してください"
-        } else {
-            "INSERT TAPE OR DISC"
-        };
-        let idle_text = vec![
-            Line::from(""),
-            Line::from(idle_msg),
-            Line::from(""),
-            Line::from(Span::styled(
-                insert_msg,
-                Style::default()
-                    .fg(theme.alert)
-                    .add_modifier(Modifier::SLOW_BLINK),
-            )),
-        ];
-        let idle_p = Paragraph::new(idle_text)
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(theme.dim))
-            .block(Block::default().padding(ratatui::widgets::Padding::new(0, 0, 5, 0)));
-        f.render_widget(idle_p, info_chunk);
+        draw_idle(f, info_chunk, theme, is_jp);
     }
 
     // Lyrics rendering — only depends on current_track, not metadata_cache
@@ -968,101 +1071,10 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
 
     if let Some(track) = app.get_current_track() {
-        let progress_percent = if track.duration.as_secs() > 0 {
-            ((track.position.as_secs_f64() / track.duration.as_secs_f64()) * 100.0) as u16
-        } else {
-            0
-        };
-
-        let label = format!(
-            " {}/{} | {:02}% ",
-            format_duration_seconds(track.position),
-            format_duration_seconds(track.duration),
-            progress_percent
-        );
-
-        let gauge = Gauge::default()
-            .block(
-                Block::default()
-                    .borders(Borders::TOP | Borders::BOTTOM)
-                    .border_style(Style::default().fg(theme.dim))
-                    .title(vec![
-                        Span::styled(" [ ", Style::default().fg(theme.dim)),
-                        Span::styled(label, Style::default().fg(theme.dim)),
-                        Span::styled(" ] ", Style::default().fg(theme.dim)),
-                    ]),
-            )
-            .gauge_style(Style::default().fg(theme.primary).bg(if theme.is_retro {
-                Color::Rgb(15, 15, 15)
-            } else {
-                theme.dim
-            }))
-            .percent(progress_percent.min(100))
-            .label("");
-
-        f.render_widget(gauge, tuner_area);
+        draw_progress(f, tuner_area, track, theme);
     }
 
-    let controls = if is_jp {
-        vec![
-            ("▶再生", "SPC"),
-            ("▶▶次", "]"),
-            ("◀◀前", "["),
-            ("音量＋", "+"),
-            ("音量－", "-"),
-            ("消音", "m"),
-            ("電源", "q"),
-        ]
-    } else {
-        vec![
-            ("PLAY", "SPC"),
-            ("SKIP", "]"),
-            ("PREV", "["),
-            ("VOL+", "+"),
-            ("VOL-", "-"),
-            ("MUTE", "m"),
-            ("EXIT", "q"),
-        ]
-    };
-
-    let btn_width = control_area.width / controls.len() as u16;
-    let btn_layout = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(vec![Constraint::Length(btn_width); controls.len()])
-        .split(control_area);
-
-    for (i, (label, key)) in controls.iter().enumerate() {
-        if i < btn_layout.len() {
-            let btn_text = Line::from(vec![
-                Span::styled(
-                    format!(" {}", label),
-                    Style::default()
-                        .fg(theme.primary)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(format!(" [{}] ", key), Style::default().fg(theme.dim)),
-            ]);
-
-            let mut btn_block = Block::default()
-                .borders(Borders::ALL)
-                .border_type(if theme.is_retro {
-                    BorderType::Thick
-                } else {
-                    BorderType::Plain
-                })
-                .border_style(Style::default().fg(theme.dim));
-
-            if theme.is_retro {
-                btn_block = btn_block.bg(Color::Rgb(10, 10, 10));
-            }
-
-            let btn = Paragraph::new(btn_text)
-                .alignment(Alignment::Center)
-                .block(btn_block);
-
-            f.render_widget(btn, btn_layout[i]);
-        }
-    }
+    draw_controls(f, control_area, theme, is_jp);
 
     // Render settings menu overlay if open
     if app.settings_menu.is_open {
