@@ -836,9 +836,8 @@ fn draw_metadata(
     let items_count = labels.len();
 
     if is_two_columns {
-        let col_layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        let col_layout = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)])
+            .spacing(SPACING_NORMAL)
             .split(area);
 
         let mid = items_count.div_ceil(2);
