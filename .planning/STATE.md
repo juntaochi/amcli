@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-26T15:53:22.262Z"
+stopped_at: "Checkpoint: 03-02 Task 3 human-verify (Tasks 1-2 committed)"
+last_updated: "2026-03-26T15:58:50.533Z"
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -70,6 +70,8 @@ Recent decisions affecting current work:
 - [Phase 02]: Conditional Min(20) guard at narrow widths instead of compound constraints
 - [Phase 03]: Rect::centered() for artwork centering instead of manual Layout splits
 - [Phase 03]: Fill(1) for even button distribution replacing integer-division widths
+- [Phase 03]: Fill(1)+Fill(1) with spacing for two-column metadata instead of Percentage(50)
+- [Phase 03]: 3-tier graduated lyrics dimming: accent+bold current, primary near (+-2), dim far
 
 ### Pending Todos
 
@@ -82,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T15:53:22.261Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-03-26T15:58:41.692Z
+Stopped at: Checkpoint: 03-02 Task 3 human-verify (Tasks 1-2 committed)
 Resume file: None
