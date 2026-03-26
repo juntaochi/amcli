@@ -751,28 +751,12 @@ fn draw_artwork(
     is_jp: bool,
 ) {
     // Calculate square size that fits in the column with horizontal padding
-    let h_padding = 2;
-    let side = area.width.saturating_sub(h_padding * 2);
+    let side = area.width.saturating_sub(4); // 2px padding each side
     let char_height = side / 2;
-    let v_padding = (area.height.saturating_sub(char_height)) / 2;
-
-    let art_rect = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(v_padding),
-            Constraint::Length(char_height),
-            Constraint::Min(0),
-        ])
-        .split(area)[1];
-
-    let art_rect = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length(h_padding),
-            Constraint::Length(side),
-            Constraint::Min(0),
-        ])
-        .split(art_rect)[1];
+    let art_rect = area.centered(
+        Constraint::Length(side),
+        Constraint::Length(char_height),
+    );
 
     if is_loading {
         let loader = Throbber::default()
