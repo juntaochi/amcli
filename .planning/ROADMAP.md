@@ -41,8 +41,10 @@ Plans:
   1. Resizing the terminal shows content areas growing and shrinking proportionally -- no fixed-size gaps or dead zones appear
   2. The artwork/info column split adapts to terminal width (artwork gets more space in wide terminals, info gets protected minimum in narrow ones)
   3. Spacing between all sections (artwork, info, lyrics, progress, controls) is visually consistent -- no section has noticeably tighter or looser margins than others
-**Plans**: TBD
-**UI hint**: yes
+**Plans:** 1 plan
+
+Plans:
+- [ ] 02-01-PLAN.md -- Spacing constants, Fill-based proportional layout, and Layout::spacing() integration
 
 ### Phase 3: Section-Level Polish
 **Goal**: Each individual section reaches visual polish -- artwork centered, buttons evenly distributed, metadata aligned, lyrics highlighted with graduated dimming
@@ -63,6 +65,6 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Draw Function Decomposition | 0/2 | Planned | - |
-| 2. Proportional Layout & Spacing System | 0/? | Not started | - |
+| 1. Draw Function Decomposition | 2/2 | Complete | 2026-03-26 |
+| 2. Proportional Layout & Spacing System | 0/1 | Planned | - |
 | 3. Section-Level Polish | 0/? | Not started | - |
