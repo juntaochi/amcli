@@ -55,8 +55,12 @@ Plans:
   2. Control buttons are evenly distributed across the full terminal width at any size -- no remainder gap on the right
   3. Song info labels and values (title, artist, album) are cleanly aligned in a consistent column layout
   4. The current lyrics line is visually distinct (highlighted with accent color), and surrounding lines dim gradually with distance from the current line
-**Plans**: TBD
+**Plans:** 2 plans
 **UI hint**: yes
+
+Plans:
+- [ ] 03-01-PLAN.md -- Center artwork with Rect::centered(), distribute buttons with Fill(1)
+- [ ] 03-02-PLAN.md -- Align metadata columns, add 3-tier graduated lyrics dimming
 
 ## Progress
 
@@ -67,4 +71,4 @@ Phases execute in numeric order: 1 -> 2 -> 3
 |-------|----------------|--------|-----------|
 | 1. Draw Function Decomposition | 2/2 | Complete | 2026-03-26 |
 | 2. Proportional Layout & Spacing System | 0/1 | Planned | - |
-| 3. Section-Level Polish | 0/? | Not started | - |
+| 3. Section-Level Polish | 0/2 | Planned | - |
