@@ -756,8 +756,10 @@ fn draw_artwork(
     theme: Theme,
     is_jp: bool,
 ) {
-    // Calculate square size that fits in the column with horizontal padding
-    let side = area.width.saturating_sub(4); // 2px padding each side
+    // Calculate square size that fits in the column (constrain to both width and height)
+    let max_from_width = area.width.saturating_sub(4); // 2px padding each side
+    let max_from_height = area.height.saturating_mul(2); // terminal chars are ~2:1 aspect ratio
+    let side = max_from_width.min(max_from_height);
     let char_height = side / 2;
     let art_rect = area.centered(Constraint::Length(side), Constraint::Length(char_height));
 
