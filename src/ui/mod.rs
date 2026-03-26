@@ -564,14 +564,8 @@ impl App {
     }
 }
 
-pub fn draw_lyrics(f: &mut Frame, area: Rect, app: &App) {
-    let theme = app.current_theme();
-    let track = match app.get_current_track() {
-        Some(t) => t,
-        None => return,
-    };
-
-    let lyrics: &Lyrics = match &app.current_lyrics {
+fn draw_lyrics(f: &mut Frame, area: Rect, track: &Track, lyrics: Option<&Lyrics>, theme: Theme) {
+    let lyrics: &Lyrics = match lyrics {
         Some(l) => l,
         None => {
             let p = Paragraph::new("NO LYRICS AVAILABLE")
@@ -612,6 +606,71 @@ pub fn draw_lyrics(f: &mut Frame, area: Rect, app: &App) {
         .scroll((scroll, 0));
 
     f.render_widget(p, area);
+}
+
+fn draw_chassis(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) -> Rect {
+    if theme.is_retro {
+        let chassis_block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Thick)
+            .border_style(Style::default().fg(theme.dim))
+            .title(vec![
+                Span::styled(" + ", Style::default().fg(theme.dim)),
+                Span::styled(
+                    format!(" ❖ MODEL: AMCLI // THEME: {} ", theme.name.to_uppercase()),
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" + ", Style::default().fg(theme.dim)),
+            ])
+            .title_alignment(Alignment::Center)
+            .title_bottom(vec![
+                Span::styled(" + ", Style::default().fg(theme.dim)),
+                Span::styled(
+                    if is_jp {
+                        " 産業用音響機器 "
+                    } else {
+                        " INDUSTRIAL AUDIO COMPONENT "
+                    },
+                    Style::default().fg(theme.dim).add_modifier(Modifier::DIM),
+                ),
+                Span::styled(" + ", Style::default().fg(theme.dim)),
+            ])
+            .title_alignment(Alignment::Center);
+
+        let inner = chassis_block.inner(area);
+        f.render_widget(chassis_block, area);
+
+        for y in (inner.top()..inner.bottom()).step_by(2) {
+            let line = Paragraph::new(" ".repeat(inner.width as usize)).style(
+                Style::default()
+                    .bg(Color::Rgb(5, 5, 5))
+                    .add_modifier(Modifier::DIM),
+            );
+            f.render_widget(
+                line,
+                Rect::new(inner.left(), y, inner.width, 1),
+            );
+        }
+        inner
+    } else {
+        area
+    }
+}
+
+fn draw_screen_border(f: &mut Frame, area: Rect, theme: Theme) -> Rect {
+    if theme.is_retro {
+        let screen_block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Double)
+            .border_style(Style::default().fg(theme.dim));
+        let inner = screen_block.inner(area);
+        f.render_widget(screen_block, area);
+        inner
+    } else {
+        area
+    }
 }
 
 fn draw_idle(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) {
@@ -749,54 +808,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
     f.render_widget(Block::default().style(Style::default().bg(theme.bg)), area);
 
-    let chassis_inner = if theme.is_retro {
-        let chassis_block = Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Thick)
-            .border_style(Style::default().fg(theme.dim))
-            .title(vec![
-                Span::styled(" + ", Style::default().fg(theme.dim)),
-                Span::styled(
-                    format!(" ❖ MODEL: AMCLI // THEME: {} ", theme.name.to_uppercase()),
-                    Style::default()
-                        .fg(theme.primary)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(" + ", Style::default().fg(theme.dim)),
-            ])
-            .title_alignment(Alignment::Center)
-            .title_bottom(vec![
-                Span::styled(" + ", Style::default().fg(theme.dim)),
-                Span::styled(
-                    if is_jp {
-                        " 産業用音響機器 "
-                    } else {
-                        " INDUSTRIAL AUDIO COMPONENT "
-                    },
-                    Style::default().fg(theme.dim).add_modifier(Modifier::DIM),
-                ),
-                Span::styled(" + ", Style::default().fg(theme.dim)),
-            ])
-            .title_alignment(Alignment::Center);
-
-        let inner = chassis_block.inner(area);
-        f.render_widget(chassis_block, area);
-
-        for y in (inner.top()..inner.bottom()).step_by(2) {
-            let line = Paragraph::new(" ".repeat(inner.width as usize)).style(
-                Style::default()
-                    .bg(Color::Rgb(5, 5, 5))
-                    .add_modifier(Modifier::DIM),
-            );
-            f.render_widget(
-                line,
-                Rect::new(inner.left(), y, inner.width, 1),
-            );
-        }
-        inner
-    } else {
-        area
-    };
+    let chassis_inner = draw_chassis(f, area, theme, is_jp);
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -811,18 +823,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let tuner_area = chunks[1];
     let control_area = chunks[2];
 
-    let screen_inner = if theme.is_retro {
-        let screen_block = Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Double)
-            .border_style(Style::default().fg(theme.dim));
-
-        let inner = screen_block.inner(display_area);
-        f.render_widget(screen_block, display_area);
-        inner
-    } else {
-        display_area
-    };
+    let screen_inner = draw_screen_border(f, display_area, theme);
 
     let show_artwork = app.config.artwork.album && display_area.width > 50;
 
@@ -1066,8 +1067,10 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
 
     // Lyrics rendering — only depends on current_track, not metadata_cache
-    if lyrics_area.height > 2 && app.get_current_track().is_some() {
-        draw_lyrics(f, lyrics_area, app);
+    if lyrics_area.height > 2 {
+        if let Some(track) = app.current_track.as_ref() {
+            draw_lyrics(f, lyrics_area, track, app.current_lyrics.as_ref(), theme);
+        }
     }
 
     if let Some(track) = app.get_current_track() {
