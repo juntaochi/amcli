@@ -45,22 +45,22 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| STRC-01 | — | Pending |
-| STRC-02 | — | Pending |
-| LAYT-01 | — | Pending |
-| LAYT-02 | — | Pending |
-| LAYT-03 | — | Pending |
-| LAYT-04 | — | Pending |
-| VISL-01 | — | Pending |
-| VISL-02 | — | Pending |
-| VISL-03 | — | Pending |
-| VISL-04 | — | Pending |
+| STRC-01 | Phase 1 | Pending |
+| STRC-02 | Phase 1 | Pending |
+| LAYT-01 | Phase 3 | Pending |
+| LAYT-02 | Phase 3 | Pending |
+| LAYT-03 | Phase 2 | Pending |
+| LAYT-04 | Phase 2 | Pending |
+| VISL-01 | Phase 2 | Pending |
+| VISL-02 | Phase 3 | Pending |
+| VISL-03 | Phase 3 | Pending |
+| VISL-04 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 10 total
-- Mapped to phases: 0
-- Unmapped: 10 (pending roadmap creation)
+- Mapped to phases: 10
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-26*
-*Last updated: 2026-03-26 after initial definition*
+*Last updated: 2026-03-26 after roadmap creation*
