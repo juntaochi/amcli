@@ -36,7 +36,6 @@ pub const COLOR_ALERT: Color = Color::Rgb(255, 50, 50);
 #[allow(dead_code)]
 const SPACING_TIGHT: u16 = 0; // No gap -- adjacent elements touching
 const SPACING_NORMAL: u16 = 1; // 1-cell gap -- between sibling sections
-#[allow(dead_code)]
 const SPACING_SECTION: u16 = 2; // 2-cell gap -- between major sections
 
 #[derive(Debug, Clone, Copy)]
@@ -900,8 +899,9 @@ fn draw_metadata(
                 )));
             }
             f.render_widget(
-                Paragraph::new(lines)
-                    .block(Block::default().padding(ratatui::widgets::Padding::new(1, 1, 0, 0))),
+                Paragraph::new(lines).block(Block::default().padding(
+                    ratatui::widgets::Padding::new(SPACING_NORMAL, SPACING_NORMAL, 0, 0),
+                )),
                 col_layout[col],
             );
         }
@@ -935,8 +935,12 @@ fn draw_metadata(
             )));
         }
         f.render_widget(
-            Paragraph::new(lines)
-                .block(Block::default().padding(ratatui::widgets::Padding::new(2, 2, 0, 0))),
+            Paragraph::new(lines).block(Block::default().padding(ratatui::widgets::Padding::new(
+                SPACING_SECTION,
+                SPACING_SECTION,
+                0,
+                0,
+            ))),
             area,
         );
     }
@@ -1053,17 +1057,16 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         && metadata_width >= 40;
     let meta_height = if is_two_columns { 7 } else { 10 };
     let (metadata_area, lyrics_area) = if !show_artwork && has_lyrics {
-        let parts = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
-            .split(info_chunk);
-        (parts[0], parts[1])
+        let [meta, lyrics] = Layout::horizontal([Constraint::Fill(2), Constraint::Fill(3)])
+            .spacing(SPACING_NORMAL)
+            .areas(info_chunk);
+        (meta, lyrics)
     } else if has_lyrics && info_height > meta_height + 2 {
-        let parts = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(meta_height as u16), Constraint::Min(0)])
-            .split(info_chunk);
-        (parts[0], parts[1])
+        let [meta, lyrics] =
+            Layout::vertical([Constraint::Length(meta_height as u16), Constraint::Fill(1)])
+                .spacing(SPACING_NORMAL)
+                .areas(info_chunk);
+        (meta, lyrics)
     } else {
         (info_chunk, Rect::default())
     };
