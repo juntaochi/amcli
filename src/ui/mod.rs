@@ -893,9 +893,8 @@ fn draw_metadata(
                 )));
             }
             f.render_widget(
-                Paragraph::new(lines).block(
-                    Block::default().padding(ratatui::widgets::Padding::new(1, 1, 0, 0)),
-                ),
+                Paragraph::new(lines)
+                    .block(Block::default().padding(ratatui::widgets::Padding::new(1, 1, 0, 0))),
                 col_layout[col],
             );
         }
@@ -999,16 +998,15 @@ fn draw_controls(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) {
     }
 }
 
+// Orchestrator: computes layout, dispatches to section renderers
 pub fn draw(f: &mut Frame, app: &mut App) {
     let area = f.area();
     let theme = app.current_theme();
     let is_jp = app.config.general.language == crate::config::Language::Japanese;
-
     f.render_widget(Block::default().style(Style::default().bg(theme.bg)), area);
 
     let chassis_inner = draw_chassis(f, area, theme, is_jp);
-
-    let chunks = Layout::default()
+    let main = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(10),
@@ -1016,36 +1014,27 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             Constraint::Length(3),
         ])
         .split(chassis_inner);
-
-    let display_area = chunks[0];
-    let tuner_area = chunks[1];
-    let control_area = chunks[2];
+    let (display_area, tuner_area, control_area) = (main[0], main[1], main[2]);
 
     let screen_inner = draw_screen_border(f, display_area, theme);
-
     let show_artwork = app.config.artwork.album && display_area.width > 50;
-
-    let content_layout = if show_artwork {
-        Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(42),
-                Constraint::Length(1),
-                Constraint::Percentage(57),
-            ])
-            .split(screen_inner)
+    let artwork_constraints: &[Constraint] = if show_artwork {
+        &[
+            Constraint::Percentage(42),
+            Constraint::Length(1),
+            Constraint::Percentage(57),
+        ]
     } else {
-        Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(100)])
-            .split(screen_inner)
+        &[Constraint::Percentage(100)]
     };
-
+    let content_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(artwork_constraints)
+        .split(screen_inner);
     if show_artwork {
-        let artwork_column = content_layout[0];
         draw_artwork(
             f,
-            artwork_column,
+            content_layout[0],
             app.artwork_protocol.as_mut(),
             app.is_loading_artwork,
             &mut app.throbber_state,
@@ -1053,22 +1042,18 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             is_jp,
         );
     }
-
     let info_chunk = if show_artwork {
         content_layout[2]
     } else {
         content_layout[0]
     };
-
     let has_lyrics = app.current_lyrics.is_some();
     let info_height = info_chunk.height as usize;
     let metadata_width = info_chunk.width;
-
     let is_two_columns = show_artwork
         && (metadata_width > 80 || (has_lyrics && info_height <= 14))
         && metadata_width >= 40;
     let meta_height = if is_two_columns { 7 } else { 10 };
-
     let (metadata_area, lyrics_area) = if !show_artwork && has_lyrics {
         let parts = Layout::default()
             .direction(Direction::Horizontal)
@@ -1098,21 +1083,17 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     } else {
         draw_idle(f, info_chunk, theme, is_jp);
     }
-
-    // Lyrics rendering — only depends on current_track, not metadata_cache
     if lyrics_area.height > 2 {
         if let Some(track) = app.current_track.as_ref() {
             draw_lyrics(f, lyrics_area, track, app.current_lyrics.as_ref(), theme);
         }
     }
-
     if let Some(track) = app.get_current_track() {
         draw_progress(f, tuner_area, track, theme);
     }
-
     draw_controls(f, control_area, theme, is_jp);
 
-    // Render settings menu overlay if open
+    // LAST: Settings overlay (z-order contract -- Ratatui has no z-index)
     if app.settings_menu.is_open {
         app.settings_menu.render(f, theme);
     }
