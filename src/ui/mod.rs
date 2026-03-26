@@ -596,11 +596,17 @@ fn draw_lyrics(f: &mut Frame, area: Rect, track: &Track, lyrics: Option<&Lyrics>
 
     let mut lines = Vec::new();
     for (i, line) in lyrics.lines.iter().enumerate() {
+        let distance = (i as isize - current_index as isize).unsigned_abs();
         let style = if i == current_index {
+            // Tier 1: Current line -- accent color + bold (brightest)
             Style::default()
-                .fg(theme.primary)
+                .fg(theme.accent)
                 .add_modifier(Modifier::BOLD)
+        } else if distance <= 2 {
+            // Tier 2: Near lines (+-1-2) -- normal readable text
+            Style::default().fg(theme.primary)
         } else {
+            // Tier 3: Far lines (beyond +-2) -- faded
             Style::default().fg(theme.dim)
         };
         lines.push(Line::from(Span::styled(&line.text, style)));
