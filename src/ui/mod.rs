@@ -735,6 +735,207 @@ fn draw_progress(f: &mut Frame, area: Rect, track: &Track, theme: Theme) {
     f.render_widget(gauge, area);
 }
 
+fn draw_artwork(
+    f: &mut Frame,
+    area: Rect,
+    protocol: Option<&mut StatefulProtocol>,
+    is_loading: bool,
+    throbber_state: &mut ThrobberState,
+    theme: Theme,
+    is_jp: bool,
+) {
+    // Calculate square size that fits in the column with horizontal padding
+    let h_padding = 2;
+    let side = area.width.saturating_sub(h_padding * 2);
+    let char_height = side / 2;
+    let v_padding = (area.height.saturating_sub(char_height)) / 2;
+
+    let art_rect = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(v_padding),
+            Constraint::Length(char_height),
+            Constraint::Min(0),
+        ])
+        .split(area)[1];
+
+    let art_rect = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(h_padding),
+            Constraint::Length(side),
+            Constraint::Min(0),
+        ])
+        .split(art_rect)[1];
+
+    if is_loading {
+        let loader = Throbber::default()
+            .throbber_set(BRAILLE_SIX_DOUBLE)
+            .use_type(WhichUse::Spin)
+            .style(Style::default().fg(theme.accent));
+        f.render_stateful_widget(loader, art_rect, throbber_state);
+    } else if let Some(protocol) = protocol {
+        let image = StatefulImage::default();
+        f.render_stateful_widget(image, art_rect, protocol);
+    } else {
+        let no_sig_text = if is_jp { "信号なし" } else { "NO SIGNAL" };
+        let no_sig = Paragraph::new(no_sig_text)
+            .style(Style::default().fg(theme.dim).add_modifier(Modifier::DIM))
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::NONE));
+        let v_center = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(45),
+                Constraint::Length(1),
+                Constraint::Min(0),
+            ])
+            .split(art_rect);
+        f.render_widget(no_sig, v_center[1]);
+    }
+}
+
+fn draw_metadata(
+    f: &mut Frame,
+    area: Rect,
+    track: &Track,
+    animation_frame: u32,
+    is_two_columns: bool,
+    theme: Theme,
+    is_jp: bool,
+) {
+    let status_text = if is_jp {
+        "動作状態: "
+    } else {
+        "SYS.STATUS: "
+    };
+    let online_text = if is_jp { "稼働中" } else { "ONLINE" };
+
+    // Only show status line for retro themes
+    let status_line = if theme.is_retro {
+        Some(Line::from(vec![
+            Span::styled(status_text, Style::default().fg(theme.dim)),
+            Span::styled(
+                online_text,
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled("PCM 44.1kHz / STEREO", Style::default().fg(theme.accent)),
+        ]))
+    } else {
+        None
+    };
+
+    let labels = if is_jp {
+        vec!["曲名", "アーティスト", "アルバム"]
+    } else {
+        vec!["TRACK TITLE", "ARTIST", "ALBUM REFERENCE"]
+    };
+
+    let values = [
+        track.name.to_uppercase(),
+        track.artist.to_uppercase(),
+        track.album.to_uppercase(),
+        format!(
+            "{} / {}",
+            format_duration(track.position),
+            format_duration(track.duration)
+        ),
+    ];
+
+    let _available_height = area.height as usize;
+    let items_count = labels.len();
+
+    if is_two_columns {
+        let col_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(area);
+
+        let mid = items_count.div_ceil(2);
+        let col_width = col_layout[0].width.saturating_sub(6) as usize;
+
+        for col in 0..2 {
+            let start = if col == 0 { 0 } else { mid };
+            let end = if col == 0 { mid } else { items_count };
+            let mut lines = vec![Line::from("")];
+
+            if col == 0 {
+                if let Some(ref s_line) = status_line {
+                    lines.push(s_line.clone());
+                    lines.push(Line::from(vec![
+                        Span::raw("────────────────────────").fg(theme.dim)
+                    ]));
+                }
+            } else if theme.is_retro {
+                lines.push(Line::from(""));
+                lines.push(Line::from(""));
+            }
+
+            for i in start..end {
+                lines.push(Line::from(Span::styled(
+                    labels[i],
+                    Style::default()
+                        .fg(theme.dim)
+                        .add_modifier(Modifier::ITALIC),
+                )));
+
+                let display_val = scroll_text(&values[i], col_width, animation_frame);
+
+                lines.push(Line::from(Span::styled(
+                    format!(" {} ", display_val),
+                    Style::default()
+                        .bg(theme.dim)
+                        .fg(theme.bg)
+                        .add_modifier(Modifier::BOLD),
+                )));
+            }
+            f.render_widget(
+                Paragraph::new(lines).block(
+                    Block::default().padding(ratatui::widgets::Padding::new(1, 1, 0, 0)),
+                ),
+                col_layout[col],
+            );
+        }
+    } else {
+        let mut lines = vec![Line::from("")];
+        if let Some(ref s_line) = status_line {
+            lines.push(s_line.clone());
+            lines.push(Line::from(vec![Span::raw(
+                "──────────────────────────────────────",
+            )
+            .fg(theme.dim)]));
+        }
+        let col_width = area.width.saturating_sub(6) as usize;
+
+        for i in 0..items_count {
+            lines.push(Line::from(Span::styled(
+                labels[i],
+                Style::default()
+                    .fg(theme.dim)
+                    .add_modifier(Modifier::ITALIC),
+            )));
+
+            let display_val = scroll_text(&values[i], col_width, animation_frame);
+
+            lines.push(Line::from(Span::styled(
+                format!(" {} ", display_val),
+                Style::default()
+                    .bg(theme.dim)
+                    .fg(theme.bg)
+                    .add_modifier(Modifier::BOLD),
+            )));
+        }
+        f.render_widget(
+            Paragraph::new(lines)
+                .block(Block::default().padding(ratatui::widgets::Padding::new(2, 2, 0, 0))),
+            area,
+        );
+    }
+}
+
 fn draw_controls(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) {
     let controls = if is_jp {
         vec![
@@ -842,59 +1043,15 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
     if show_artwork {
         let artwork_column = content_layout[0];
-
-        // Calculate square size that fits in the column with horizontal padding
-        let h_padding = 2;
-        let side = artwork_column.width.saturating_sub(h_padding * 2);
-
-        // Vertical centering: use half the side as characters are roughly 2:1 height:width
-        let char_height = side / 2;
-        let v_padding = (artwork_column.height.saturating_sub(char_height)) / 2;
-
-        let art_rect = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(v_padding),
-                Constraint::Length(char_height),
-                Constraint::Min(0),
-            ])
-            .split(artwork_column)[1];
-
-        let art_rect = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Length(h_padding),
-                Constraint::Length(side),
-                Constraint::Min(0),
-            ])
-            .split(art_rect)[1];
-
-        if app.is_loading_artwork {
-            let loader = Throbber::default()
-                .throbber_set(BRAILLE_SIX_DOUBLE)
-                .use_type(WhichUse::Spin)
-                .style(Style::default().fg(theme.accent));
-            f.render_stateful_widget(loader, art_rect, &mut app.throbber_state);
-        } else if let Some(ref mut protocol) = app.artwork_protocol {
-            let image = StatefulImage::default();
-            f.render_stateful_widget(image, art_rect, protocol);
-        } else {
-            let no_sig_text = if is_jp { "信号なし" } else { "NO SIGNAL" };
-            let no_sig = Paragraph::new(no_sig_text)
-                .style(Style::default().fg(theme.dim).add_modifier(Modifier::DIM))
-                .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::NONE));
-
-            let v_center = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Percentage(45),
-                    Constraint::Length(1),
-                    Constraint::Min(0),
-                ])
-                .split(art_rect);
-            f.render_widget(no_sig, v_center[1]);
-        }
+        draw_artwork(
+            f,
+            artwork_column,
+            app.artwork_protocol.as_mut(),
+            app.is_loading_artwork,
+            &mut app.throbber_state,
+            theme,
+            is_jp,
+        );
     }
 
     let info_chunk = if show_artwork {
@@ -928,137 +1085,16 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         (info_chunk, Rect::default())
     };
 
-    if let Some(track) = app.get_current_track().cloned() {
-        let status_text = if is_jp {
-            "動作状態: "
-        } else {
-            "SYS.STATUS: "
-        };
-        let online_text = if is_jp { "稼働中" } else { "ONLINE" };
-
-        // Only show status line for retro themes
-        let status_line = if theme.is_retro {
-            Some(Line::from(vec![
-                Span::styled(status_text, Style::default().fg(theme.dim)),
-                Span::styled(
-                    online_text,
-                    Style::default()
-                        .fg(Color::Green)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::raw("  "),
-                Span::styled("PCM 44.1kHz / STEREO", Style::default().fg(theme.accent)),
-            ]))
-        } else {
-            None
-        };
-
-        let labels = if is_jp {
-            vec!["曲名", "アーティスト", "アルバム"]
-        } else {
-            vec!["TRACK TITLE", "ARTIST", "ALBUM REFERENCE"]
-        };
-
-        let values = [
-            track.name.to_uppercase(),
-            track.artist.to_uppercase(),
-            track.album.to_uppercase(),
-            format!(
-                "{} / {}",
-                format_duration(track.position),
-                format_duration(track.duration)
-            ),
-        ];
-
-        let _available_height = metadata_area.height as usize;
-        let items_count = labels.len();
-
-        if is_two_columns {
-            let col_layout = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-                .split(metadata_area);
-
-            let mid = items_count.div_ceil(2);
-            let col_width = col_layout[0].width.saturating_sub(6) as usize;
-
-            for col in 0..2 {
-                let start = if col == 0 { 0 } else { mid };
-                let end = if col == 0 { mid } else { items_count };
-                let mut lines = vec![Line::from("")];
-
-                if col == 0 {
-                    if let Some(ref s_line) = status_line {
-                        lines.push(s_line.clone());
-                        lines.push(Line::from(vec![
-                            Span::raw("────────────────────────").fg(theme.dim)
-                        ]));
-                    }
-                } else if theme.is_retro {
-                    lines.push(Line::from(""));
-                    lines.push(Line::from(""));
-                }
-
-                for i in start..end {
-                    lines.push(Line::from(Span::styled(
-                        labels[i],
-                        Style::default()
-                            .fg(theme.dim)
-                            .add_modifier(Modifier::ITALIC),
-                    )));
-
-                    let display_val = scroll_text(&values[i], col_width, app.animation_frame);
-
-                    lines.push(Line::from(Span::styled(
-                        format!(" {} ", display_val),
-                        Style::default()
-                            .bg(theme.dim)
-                            .fg(theme.bg)
-                            .add_modifier(Modifier::BOLD),
-                    )));
-                }
-                f.render_widget(
-                    Paragraph::new(lines).block(
-                        Block::default().padding(ratatui::widgets::Padding::new(1, 1, 0, 0)),
-                    ),
-                    col_layout[col],
-                );
-            }
-        } else {
-            let mut lines = vec![Line::from("")];
-            if let Some(ref s_line) = status_line {
-                lines.push(s_line.clone());
-                lines.push(Line::from(vec![Span::raw(
-                    "──────────────────────────────────────",
-                )
-                .fg(theme.dim)]));
-            }
-            let col_width = metadata_area.width.saturating_sub(6) as usize;
-
-            for i in 0..items_count {
-                lines.push(Line::from(Span::styled(
-                    labels[i],
-                    Style::default()
-                        .fg(theme.dim)
-                        .add_modifier(Modifier::ITALIC),
-                )));
-
-                let display_val = scroll_text(&values[i], col_width, app.animation_frame);
-
-                lines.push(Line::from(Span::styled(
-                    format!(" {} ", display_val),
-                    Style::default()
-                        .bg(theme.dim)
-                        .fg(theme.bg)
-                        .add_modifier(Modifier::BOLD),
-                )));
-            }
-            f.render_widget(
-                Paragraph::new(lines)
-                    .block(Block::default().padding(ratatui::widgets::Padding::new(2, 2, 0, 0))),
-                metadata_area,
-            );
-        }
+    if let Some(track) = app.current_track.as_ref() {
+        draw_metadata(
+            f,
+            metadata_area,
+            track,
+            app.animation_frame,
+            is_two_columns,
+            theme,
+            is_jp,
+        );
     } else {
         draw_idle(f, info_chunk, theme, is_jp);
     }
