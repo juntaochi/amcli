@@ -27,7 +27,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Each section renderer receives a Rect and narrow data slices (not the entire App struct)
   3. The application renders identically to before decomposition -- no visual changes
   4. Settings overlay renders correctly on top of all sections (z-order preserved)
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md -- Extract leaf section renderers (controls, progress, idle, chassis, screen_border, lyrics narrowing)
+- [ ] 01-02-PLAN.md -- Extract artwork + metadata renderers, finalize draw() orchestrator
 
 ### Phase 2: Proportional Layout & Spacing System
 **Goal**: Layout fills available terminal space proportionally with consistent spacing, eliminating dead zones and ad-hoc padding
@@ -59,6 +63,6 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Draw Function Decomposition | 0/? | Not started | - |
+| 1. Draw Function Decomposition | 0/2 | Planned | - |
 | 2. Proportional Layout & Spacing System | 0/? | Not started | - |
 | 3. Section-Level Polish | 0/? | Not started | - |
