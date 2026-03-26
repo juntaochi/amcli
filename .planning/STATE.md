@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-03-26T14:12:08.846Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-03-26T14:25:57.502Z"
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -47,6 +47,7 @@ Plan: 2 of 2
 
 *Updated after each plan completion*
 | Phase 01 P01 | 6min | 2 tasks | 1 files |
+| Phase 01 P02 | 10min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -59,6 +60,9 @@ Recent decisions affecting current work:
 - [Roadmap]: Alignment rename (HorizontalAlignment migration) folded into Phase 1 as prep, not standalone phase
 - [Phase 01]: Standalone renderer pattern: fn draw_X(Frame, Rect, narrow-data) for leaf sections, fn draw_X(...) -> Rect for structural sections
 - [Phase 01]: draw_lyrics made private (pub removed) since only called within ui module
+- [Phase 01]: Artwork mutable borrows scoped before immutable borrows to satisfy borrow checker
+- [Phase 01]: Track clone eliminated: app.current_track.as_ref() instead of .cloned() on hot render path
+- [Phase 01]: Layout constraints extracted to shared slice to compact draw() below 100 lines
 
 ### Pending Todos
 
@@ -71,6 +75,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T14:12:08.845Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-03-26T14:25:57.501Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None

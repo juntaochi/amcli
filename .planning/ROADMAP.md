@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01-PLAN.md -- Extract leaf section renderers (controls, progress, idle, chassis, screen_border, lyrics narrowing)
-- [ ] 01-02-PLAN.md -- Extract artwork + metadata renderers, finalize draw() orchestrator
+- [x] 01-02-PLAN.md -- Extract artwork + metadata renderers, finalize draw() orchestrator
 
 ### Phase 2: Proportional Layout & Spacing System
 **Goal**: Layout fills available terminal space proportionally with consistent spacing, eliminating dead zones and ad-hoc padding
