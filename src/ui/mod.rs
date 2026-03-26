@@ -1000,12 +1000,24 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     f.render_widget(Block::default().style(Style::default().bg(theme.bg)), area);
 
     let chassis_inner = draw_chassis(f, area, theme, is_jp);
-    let [display_area, tuner_area, control_area] = Layout::vertical([
-        Constraint::Fill(1),
-        Constraint::Length(3),
-        Constraint::Length(3),
-    ])
-    .areas(chassis_inner);
+    // Collapse order as height shrinks: controls first, then progress bar
+    let show_controls = chassis_inner.height >= 12;
+    let show_progress = chassis_inner.height >= 8;
+    let (display_area, tuner_area, control_area) = if show_controls {
+        let [d, t, c] = Layout::vertical([
+            Constraint::Fill(1),
+            Constraint::Length(3),
+            Constraint::Length(3),
+        ])
+        .areas(chassis_inner);
+        (d, Some(t), Some(c))
+    } else if show_progress {
+        let [d, t] =
+            Layout::vertical([Constraint::Fill(1), Constraint::Length(3)]).areas(chassis_inner);
+        (d, Some(t), None)
+    } else {
+        (chassis_inner, None, None)
+    };
 
     let screen_inner = draw_screen_border(f, display_area, theme);
     let show_artwork = app.config.artwork.album && display_area.width > 50;
@@ -1072,10 +1084,14 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             draw_lyrics(f, lyrics_area, track, app.current_lyrics.as_ref(), theme);
         }
     }
-    if let Some(track) = app.get_current_track() {
-        draw_progress(f, tuner_area, track, theme);
+    if let Some(tuner_area) = tuner_area {
+        if let Some(track) = app.get_current_track() {
+            draw_progress(f, tuner_area, track, theme);
+        }
     }
-    draw_controls(f, control_area, theme, is_jp);
+    if let Some(control_area) = control_area {
+        draw_controls(f, control_area, theme, is_jp);
+    }
 
     // LAST: Settings overlay (z-order contract -- Ratatui has no z-index)
     if app.settings_menu.is_open {
