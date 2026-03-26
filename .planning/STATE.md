@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-03-26T14:29:58.325Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-26T14:56:47.660Z"
 progress:
   total_phases: 3
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  completed_phases: 2
+  total_plans: 3
+  completed_plans: 3
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** The TUI looks polished and adapts gracefully to any terminal size
-**Current focus:** Phase 01 — draw-function-decomposition
+**Current focus:** Phase 02 — proportional-layout-spacing-system
 
 ## Current Position
 
-Phase: 2
-Plan: Not started
+Phase: 02 (proportional-layout-spacing-system) — EXECUTING
+Plan: 1 of 1
 
 ## Performance Metrics
 
@@ -48,6 +48,7 @@ Plan: Not started
 *Updated after each plan completion*
 | Phase 01 P01 | 6min | 2 tasks | 1 files |
 | Phase 01 P02 | 10min | 2 tasks | 1 files |
+| Phase 02 P01 | 5min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,9 @@ Recent decisions affecting current work:
 - [Phase 01]: Artwork mutable borrows scoped before immutable borrows to satisfy borrow checker
 - [Phase 01]: Track clone eliminated: app.current_track.as_ref() instead of .cloned() on hot render path
 - [Phase 01]: Layout constraints extracted to shared slice to compact draw() below 100 lines
+- [Phase 02]: Fill(3)/Fill(4) ratio for artwork/info split replacing Percentage(42)/Percentage(57)
+- [Phase 02]: SPACING_TIGHT/NORMAL/SECTION constant system (0/1/2 cells) for unified layout gaps
+- [Phase 02]: Conditional Min(20) guard at narrow widths instead of compound constraints
 
 ### Pending Todos
 
@@ -75,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T14:25:57.501Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-03-26T14:56:47.658Z
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None

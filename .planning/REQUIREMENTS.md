@@ -14,12 +14,12 @@
 
 - [ ] **LAYT-01**: Artwork vertically centered in its available area using Ratatui centering APIs
 - [ ] **LAYT-02**: Control buttons evenly distributed across terminal width at any size using Flex layout
-- [ ] **LAYT-03**: Layout uses proportional Fill constraints instead of percentage-based splits that leave gaps
-- [ ] **LAYT-04**: Artwork/info split ratio adapts to terminal width using Min/Max constraints
+- [x] **LAYT-03**: Layout uses proportional Fill constraints instead of percentage-based splits that leave gaps
+- [x] **LAYT-04**: Artwork/info split ratio adapts to terminal width using Min/Max constraints
 
 ### Visual Polish
 
-- [ ] **VISL-01**: Consistent spacing system with unified constants replacing ad-hoc padding values
+- [x] **VISL-01**: Consistent spacing system with unified constants replacing ad-hoc padding values
 - [ ] **VISL-02**: Song info area (title, artist, album) labels and values cleanly aligned
 - [ ] **VISL-03**: Current lyrics line highlighted with stronger visual contrast
 - [ ] **VISL-04**: Lyrics lines dim gradually with distance from current line (graduated dimming)
@@ -49,9 +49,9 @@
 | STRC-02 | Phase 1 | Complete |
 | LAYT-01 | Phase 3 | Pending |
 | LAYT-02 | Phase 3 | Pending |
-| LAYT-03 | Phase 2 | Pending |
-| LAYT-04 | Phase 2 | Pending |
-| VISL-01 | Phase 2 | Pending |
+| LAYT-03 | Phase 2 | Complete |
+| LAYT-04 | Phase 2 | Complete |
+| VISL-01 | Phase 2 | Complete |
 | VISL-02 | Phase 3 | Pending |
 | VISL-03 | Phase 3 | Pending |
 | VISL-04 | Phase 3 | Pending |

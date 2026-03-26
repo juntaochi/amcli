@@ -44,7 +44,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 02-01-PLAN.md -- Spacing constants, Fill-based proportional layout, and Layout::spacing() integration
+- [x] 02-01-PLAN.md -- Spacing constants, Fill-based proportional layout, and Layout::spacing() integration
 
 ### Phase 3: Section-Level Polish
 **Goal**: Each individual section reaches visual polish -- artwork centered, buttons evenly distributed, metadata aligned, lyrics highlighted with graduated dimming
