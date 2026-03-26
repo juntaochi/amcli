@@ -21,6 +21,7 @@ The TUI looks polished and adapts gracefully to any terminal size — artwork, l
 - ✓ 6 color themes — existing
 - ✓ Settings overlay menu — existing
 - ✓ Non-blocking async operations (lyrics fetch, artwork download) via Tokio — existing
+- ✓ Draw function decomposed into 8 isolated section renderers with narrow data slices — Phase 1
 
 ### Active
 
@@ -39,8 +40,8 @@ The TUI looks polished and adapts gracefully to any terminal size — artwork, l
 
 ## Context
 
-- Monolithic `draw()` function (~455 lines) handles all rendering in one place. Layout changes here are the primary work area.
-- `src/ui/mod.rs` is 1212 lines and contains all rendering logic plus App state. The existing tech debt (identified in CONCERNS.md) of splitting this file may help with layout work but is not the goal.
+- The `draw()` function is now a 99-line orchestrator dispatching to 8 section renderers (draw_controls, draw_progress, draw_idle, draw_chassis, draw_screen_border, draw_artwork, draw_metadata, draw_lyrics). Safe to modify individual sections independently.
+- `src/ui/mod.rs` contains all rendering logic plus App state. Section renderers receive narrow data slices (Frame, Rect, specific fields) instead of &mut App.
 - Ratatui uses a `Rect`-based constraint layout system. Centering and proportional distribution are done via `Layout`, `Constraint`, and `Alignment` types.
 - Terminal protocols for artwork (Sixel, Kitty, halfblocks) have different aspect ratio behaviors that affect vertical centering.
 - The UI is rendered in Japanese (configurable to English). Labels like 曲名, アーティスト, アルバム, 再生, 次, 前, etc.
@@ -77,4 +78,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-26 after initialization*
+*Last updated: 2026-03-26 after Phase 1 completion*
