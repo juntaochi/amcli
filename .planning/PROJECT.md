@@ -22,6 +22,7 @@ The TUI looks polished and adapts gracefully to any terminal size — artwork, l
 - ✓ Settings overlay menu — existing
 - ✓ Non-blocking async operations (lyrics fetch, artwork download) via Tokio — existing
 - ✓ Draw function decomposed into 8 isolated section renderers with narrow data slices — Phase 1
+- ✓ Proportional Fill-based layout with unified spacing constants, no Percentage gaps — Phase 2
 
 ### Active
 
@@ -78,4 +79,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-26 after Phase 1 completion*
+*Last updated: 2026-03-26 after Phase 2 completion*
