@@ -756,9 +756,10 @@ fn draw_artwork(
     theme: Theme,
     is_jp: bool,
 ) {
-    // Size artwork to fill its area while maintaining square pixel aspect ratio
-    // Terminal chars are ~2:1, so char_height = side/2 for a visually square image
-    let side = area.width.min(area.height.saturating_mul(2));
+    // Size artwork to fit area with margin for centering (2:1 terminal char aspect ratio)
+    let max_w = area.width.saturating_sub(2); // 1 cell margin each side
+    let max_h = area.height.saturating_sub(2).saturating_mul(2); // 1 row margin top/bottom
+    let side = max_w.min(max_h);
     let char_height = side / 2;
     let art_rect = area.centered(Constraint::Length(side), Constraint::Length(char_height));
 
