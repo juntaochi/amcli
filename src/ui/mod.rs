@@ -1030,7 +1030,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             [Constraint::Min(20), Constraint::Fill(1)]
         };
         let [artwork_col, info_col] = Layout::horizontal(artwork_constraints)
-            .spacing(SPACING_NORMAL)
+            .spacing(SPACING_SECTION)
             .areas(screen_inner);
         draw_artwork(
             f,
