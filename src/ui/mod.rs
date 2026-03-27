@@ -1002,7 +1002,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let chassis_inner = draw_chassis(f, area, theme, is_jp);
     // Collapse order as height shrinks: controls first, then progress bar
     let show_controls = chassis_inner.height >= 19;
-    let show_progress = chassis_inner.height >= 8;
+    let show_progress = chassis_inner.height >= 16;
     let (display_area, tuner_area, control_area) = if show_controls {
         let [d, t, c] = Layout::vertical([
             Constraint::Fill(1),
