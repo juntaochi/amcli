@@ -1050,7 +1050,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let is_two_columns = show_artwork
         && (metadata_width > 80 || (has_lyrics && info_height <= 14))
         && metadata_width >= 40;
-    let meta_height = if is_two_columns { 7 } else { 10 };
+    let meta_height = if is_two_columns { 5 } else { 8 };
     let (metadata_area, lyrics_area) = if !show_artwork && has_lyrics {
         let [meta, lyrics] = Layout::horizontal([Constraint::Fill(2), Constraint::Fill(3)])
             .spacing(SPACING_NORMAL)
