@@ -36,6 +36,7 @@ pub const COLOR_ALERT: Color = Color::Rgb(255, 50, 50);
 #[allow(dead_code)]
 const SPACING_TIGHT: u16 = 0; // No gap -- adjacent elements touching
 const SPACING_NORMAL: u16 = 1; // 1-cell gap -- between sibling sections
+#[allow(dead_code)]
 const SPACING_SECTION: u16 = 2; // 2-cell gap -- between major sections
 
 #[derive(Debug, Clone, Copy)]
@@ -924,8 +925,8 @@ fn draw_metadata(
         }
         f.render_widget(
             Paragraph::new(lines).block(Block::default().padding(ratatui::widgets::Padding::new(
-                SPACING_SECTION,
-                SPACING_SECTION,
+                SPACING_NORMAL,
+                SPACING_NORMAL,
                 0,
                 0,
             ))),
@@ -1030,7 +1031,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             [Constraint::Min(20), Constraint::Fill(1)]
         };
         let [artwork_col, info_col] = Layout::horizontal(artwork_constraints)
-            .spacing(SPACING_SECTION)
+            .spacing(SPACING_NORMAL)
             .areas(screen_inner);
         draw_artwork(
             f,
