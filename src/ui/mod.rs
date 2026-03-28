@@ -962,8 +962,12 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         f.render_widget(gauge, tuner_area);
     }
 
-    let controls = if is_jp {
-        vec![
+    // Bolt ⚡ Optimization:
+    // Replaced dynamic `vec![]` allocations with static slice references `&[...]`.
+    // The `draw` function runs many times per second, so avoiding heap allocations
+    // for this fixed-size array reduces garbage and improves overall render speed.
+    let controls: &[(&str, &str)] = if is_jp {
+        &[
             ("▶再生", "SPC"),
             ("▶▶次", "]"),
             ("◀◀前", "["),
@@ -973,7 +977,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             ("電源", "q"),
         ]
     } else {
-        vec![
+        &[
             ("PLAY", "SPC"),
             ("SKIP", "]"),
             ("PREV", "["),
