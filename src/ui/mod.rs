@@ -850,13 +850,33 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
                     let display_val = scroll_text(values[i], col_width, app.animation_frame);
 
-                    lines.push(Line::from(Span::styled(
-                        format!(" {} ", display_val),
-                        Style::default()
-                            .bg(theme.dim)
-                            .fg(theme.bg)
-                            .add_modifier(Modifier::BOLD),
-                    )));
+                    // ⚡ Bolt Optimization:
+                    // Composing multiple `Span`s inside a `Line` avoids the dynamic string allocation
+                    // that a `format!(" {} ", display_val)` macro would cause during the high-frequency
+                    // `draw` loop. This preserves `Cow::Borrowed` references and reduces memory overhead.
+                    lines.push(Line::from(vec![
+                        Span::styled(
+                            " ",
+                            Style::default()
+                                .bg(theme.dim)
+                                .fg(theme.bg)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            display_val.to_string(),
+                            Style::default()
+                                .bg(theme.dim)
+                                .fg(theme.bg)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            " ",
+                            Style::default()
+                                .bg(theme.dim)
+                                .fg(theme.bg)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                    ]));
                 }
                 f.render_widget(
                     Paragraph::new(lines).block(
@@ -886,13 +906,32 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
                 let display_val = scroll_text(values[i], col_width, app.animation_frame);
 
-                lines.push(Line::from(Span::styled(
-                    format!(" {} ", display_val),
-                    Style::default()
-                        .bg(theme.dim)
-                        .fg(theme.bg)
-                        .add_modifier(Modifier::BOLD),
-                )));
+                // ⚡ Bolt Optimization:
+                // Constructing the layout with distinct `Span` objects avoids repeated heap
+                // allocations per frame compared to using `format!(" {} ", display_val)`.
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        " ",
+                        Style::default()
+                            .bg(theme.dim)
+                            .fg(theme.bg)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        display_val.to_string(),
+                        Style::default()
+                            .bg(theme.dim)
+                            .fg(theme.bg)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        " ",
+                        Style::default()
+                            .bg(theme.dim)
+                            .fg(theme.bg)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                ]));
             }
             f.render_widget(
                 Paragraph::new(lines)
@@ -992,14 +1031,26 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
     for (i, (label, key)) in controls.iter().enumerate() {
         if i < btn_layout.len() {
+            // ⚡ Bolt Optimization:
+            // The labels and keys are static references. Instead of interpolating them with `format!`
+            // macros on every frame, we chain static spans together. This prevents multiple memory allocations
+            // per button inside the TUI render loop.
             let btn_text = Line::from(vec![
                 Span::styled(
-                    format!(" {}", label),
+                    " ",
                     Style::default()
                         .fg(theme.primary)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(format!(" [{}] ", key), Style::default().fg(theme.dim)),
+                Span::styled(
+                    *label,
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" [", Style::default().fg(theme.dim)),
+                Span::styled(*key, Style::default().fg(theme.dim)),
+                Span::styled("] ", Style::default().fg(theme.dim)),
             ]);
 
             let mut btn_block = Block::default()
