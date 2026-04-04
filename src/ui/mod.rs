@@ -596,7 +596,19 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             .title(vec![
                 Span::styled(" + ", Style::default().fg(theme.dim)),
                 Span::styled(
-                    format!(" ❖ MODEL: AMCLI // THEME: {} ", theme.name.to_uppercase()),
+                    " ❖ MODEL: AMCLI // THEME: ",
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    theme.name,
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    " ",
                     Style::default()
                         .fg(theme.primary)
                         .add_modifier(Modifier::BOLD),
@@ -798,10 +810,10 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             None
         };
 
-        let labels = if is_jp {
-            vec!["曲名", "アーティスト", "アルバム"]
+        let labels: &[&str] = if is_jp {
+            &["曲名", "アーティスト", "アルバム"]
         } else {
-            vec!["TRACK TITLE", "ARTIST", "ALBUM REFERENCE"]
+            &["TRACK TITLE", "ARTIST", "ALBUM REFERENCE"]
         };
 
         let values = [
@@ -850,13 +862,16 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
                     let display_val = scroll_text(values[i], col_width, app.animation_frame);
 
-                    lines.push(Line::from(Span::styled(
-                        format!(" {} ", display_val),
-                        Style::default()
-                            .bg(theme.dim)
-                            .fg(theme.bg)
-                            .add_modifier(Modifier::BOLD),
-                    )));
+                    let val_style = Style::default()
+                        .bg(theme.dim)
+                        .fg(theme.bg)
+                        .add_modifier(Modifier::BOLD);
+
+                    lines.push(Line::from(vec![
+                        Span::styled(" ", val_style),
+                        Span::styled(display_val, val_style),
+                        Span::styled(" ", val_style),
+                    ]));
                 }
                 f.render_widget(
                     Paragraph::new(lines).block(
@@ -886,13 +901,16 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
                 let display_val = scroll_text(values[i], col_width, app.animation_frame);
 
-                lines.push(Line::from(Span::styled(
-                    format!(" {} ", display_val),
-                    Style::default()
-                        .bg(theme.dim)
-                        .fg(theme.bg)
-                        .add_modifier(Modifier::BOLD),
-                )));
+                let val_style = Style::default()
+                    .bg(theme.dim)
+                    .fg(theme.bg)
+                    .add_modifier(Modifier::BOLD);
+
+                lines.push(Line::from(vec![
+                    Span::styled(" ", val_style),
+                    Span::styled(display_val, val_style),
+                    Span::styled(" ", val_style),
+                ]));
             }
             f.render_widget(
                 Paragraph::new(lines)
@@ -962,25 +980,25 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         f.render_widget(gauge, tuner_area);
     }
 
-    let controls = if is_jp {
-        vec![
-            ("▶再生", "SPC"),
-            ("▶▶次", "]"),
-            ("◀◀前", "["),
-            ("音量＋", "+"),
-            ("音量－", "-"),
-            ("消音", "m"),
-            ("電源", "q"),
+    let controls: &[(&str, &str)] = if is_jp {
+        &[
+            (" ▶再生", " [SPC] "),
+            (" ▶▶次", " []] "),
+            (" ◀◀前", " [[] "),
+            (" 音量＋", " [+] "),
+            (" 音量－", " [-] "),
+            (" 消音", " [m] "),
+            (" 電源", " [q] "),
         ]
     } else {
-        vec![
-            ("PLAY", "SPC"),
-            ("SKIP", "]"),
-            ("PREV", "["),
-            ("VOL+", "+"),
-            ("VOL-", "-"),
-            ("MUTE", "m"),
-            ("EXIT", "q"),
+        &[
+            (" PLAY", " [SPC] "),
+            (" SKIP", " []] "),
+            (" PREV", " [[] "),
+            (" VOL+", " [+] "),
+            (" VOL-", " [-] "),
+            (" MUTE", " [m] "),
+            (" EXIT", " [q] "),
         ]
     };
 
@@ -994,12 +1012,12 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         if i < btn_layout.len() {
             let btn_text = Line::from(vec![
                 Span::styled(
-                    format!(" {}", label),
+                    *label,
                     Style::default()
                         .fg(theme.primary)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(format!(" [{}] ", key), Style::default().fg(theme.dim)),
+                Span::styled(*key, Style::default().fg(theme.dim)),
             ]);
 
             let mut btn_block = Block::default()
