@@ -596,7 +596,19 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             .title(vec![
                 Span::styled(" + ", Style::default().fg(theme.dim)),
                 Span::styled(
-                    format!(" ❖ MODEL: AMCLI // THEME: {} ", theme.name.to_uppercase()),
+                    " ❖ MODEL: AMCLI // THEME: ",
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    theme.name, // Theme names are already static uppercase strings, e.g., "AMBER VFD"
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    " ",
                     Style::default()
                         .fg(theme.primary)
                         .add_modifier(Modifier::BOLD),
