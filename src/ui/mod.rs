@@ -849,14 +849,20 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                     )));
 
                     let display_val = scroll_text(values[i], col_width, app.animation_frame);
+                    let val_style = Style::default()
+                        .bg(theme.dim)
+                        .fg(theme.bg)
+                        .add_modifier(Modifier::BOLD);
 
-                    lines.push(Line::from(Span::styled(
-                        format!(" {} ", display_val),
-                        Style::default()
-                            .bg(theme.dim)
-                            .fg(theme.bg)
-                            .add_modifier(Modifier::BOLD),
-                    )));
+                    // ⚡ Bolt Optimization:
+                    // Constructing the styled line using a `vec![Span, Span, Span]` rather
+                    // than `format!(" {} ", display_val)` avoids an inner String allocation
+                    // during this hot path iteration.
+                    lines.push(Line::from(vec![
+                        Span::styled(" ", val_style),
+                        Span::styled(display_val, val_style),
+                        Span::styled(" ", val_style),
+                    ]));
                 }
                 f.render_widget(
                     Paragraph::new(lines).block(
@@ -885,14 +891,20 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 )));
 
                 let display_val = scroll_text(values[i], col_width, app.animation_frame);
+                let val_style = Style::default()
+                    .bg(theme.dim)
+                    .fg(theme.bg)
+                    .add_modifier(Modifier::BOLD);
 
-                lines.push(Line::from(Span::styled(
-                    format!(" {} ", display_val),
-                    Style::default()
-                        .bg(theme.dim)
-                        .fg(theme.bg)
-                        .add_modifier(Modifier::BOLD),
-                )));
+                // ⚡ Bolt Optimization:
+                // Constructing the styled line using a `vec![Span, Span, Span]` rather
+                // than `format!(" {} ", display_val)` avoids an inner String allocation
+                // during this hot path iteration.
+                lines.push(Line::from(vec![
+                    Span::styled(" ", val_style),
+                    Span::styled(display_val, val_style),
+                    Span::styled(" ", val_style),
+                ]));
             }
             f.render_widget(
                 Paragraph::new(lines)
@@ -962,25 +974,30 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         f.render_widget(gauge, tuner_area);
     }
 
-    let controls = if is_jp {
-        vec![
-            ("▶再生", "SPC"),
-            ("▶▶次", "]"),
-            ("◀◀前", "["),
-            ("音量＋", "+"),
-            ("音量－", "-"),
-            ("消音", "m"),
-            ("電源", "q"),
+    // ⚡ Bolt Optimization:
+    // TUI applications render loops run very frequently. Previously, each button
+    // here created multiple `String` allocations via `format!(" {}", label)` and `format!(" [{}] ", key)`.
+    // By pre-baking spaces and brackets into static string slices, we avoid ~14 heap
+    // allocations per frame during the control bar drawing.
+    let controls: &[(&str, &str)] = if is_jp {
+        &[
+            (" ▶再生", " [SPC] "),
+            (" ▶▶次", " []] "),
+            (" ◀◀前", " [[] "),
+            (" 音量＋", " [+] "),
+            (" 音量－", " [-] "),
+            (" 消音", " [m] "),
+            (" 電源", " [q] "),
         ]
     } else {
-        vec![
-            ("PLAY", "SPC"),
-            ("SKIP", "]"),
-            ("PREV", "["),
-            ("VOL+", "+"),
-            ("VOL-", "-"),
-            ("MUTE", "m"),
-            ("EXIT", "q"),
+        &[
+            (" PLAY", " [SPC] "),
+            (" SKIP", " []] "),
+            (" PREV", " [[] "),
+            (" VOL+", " [+] "),
+            (" VOL-", " [-] "),
+            (" MUTE", " [m] "),
+            (" EXIT", " [q] "),
         ]
     };
 
@@ -994,12 +1011,12 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         if i < btn_layout.len() {
             let btn_text = Line::from(vec![
                 Span::styled(
-                    format!(" {}", label),
+                    *label,
                     Style::default()
                         .fg(theme.primary)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(format!(" [{}] ", key), Style::default().fg(theme.dim)),
+                Span::styled(*key, Style::default().fg(theme.dim)),
             ]);
 
             let mut btn_block = Block::default()
