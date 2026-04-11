@@ -36,6 +36,7 @@ pub struct AppleMusicController {
     runner: Box<dyn CommandRunner>,
     artwork_cache: Arc<Mutex<LruCache<String, Option<String>>>>,
     fetching_artwork: Arc<Mutex<HashSet<String>>>,
+    http_client: reqwest::Client,
 }
 
 impl AppleMusicController {
@@ -44,6 +45,7 @@ impl AppleMusicController {
             runner: Box::new(OsascriptRunner),
             artwork_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(20).unwrap()))),
             fetching_artwork: Arc::new(Mutex::new(HashSet::new())),
+            http_client: reqwest::Client::new(),
         }
     }
 
@@ -53,6 +55,7 @@ impl AppleMusicController {
             runner,
             artwork_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(20).unwrap()))),
             fetching_artwork: Arc::new(Mutex::new(HashSet::new())),
+            http_client: reqwest::Client::new(),
         }
     }
 
@@ -289,12 +292,17 @@ impl MediaPlayer for AppleMusicController {
         let cache_clone = Arc::clone(&self.artwork_cache);
         let fetching_clone = Arc::clone(&self.fetching_artwork);
 
+        // ⚡ Bolt Optimization:
+        // Using a shared `reqwest::Client` to utilize HTTP Keep-Alive and connection pooling
+        // across multiple artwork fetches. This reduces CPU overhead and network latency
+        // compared to creating a new client/TLS connection for every single request.
+        let http_client = self.http_client.clone();
         tokio::spawn(async move {
             let timeout_duration = std::time::Duration::from_secs(3);
             let mut artwork_url = None;
 
             if let Ok(Ok(response)) =
-                tokio::time::timeout(timeout_duration, reqwest::get(url)).await
+                tokio::time::timeout(timeout_duration, http_client.get(url).send()).await
             {
                 if let Ok(Ok(json)) =
                     tokio::time::timeout(timeout_duration, response.json::<serde_json::Value>())
