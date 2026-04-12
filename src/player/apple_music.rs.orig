@@ -55,7 +55,6 @@ impl AppleMusicController {
             runner,
             artwork_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(20).unwrap()))),
             fetching_artwork: Arc::new(Mutex::new(HashSet::new())),
-            http_client: reqwest::Client::new(),
         }
     }
 
@@ -291,18 +290,13 @@ impl MediaPlayer for AppleMusicController {
 
         let cache_clone = Arc::clone(&self.artwork_cache);
         let fetching_clone = Arc::clone(&self.fetching_artwork);
-        // ⚡ Bolt Optimization:
-        // Using a shared reqwest::Client instead of reqwest::get() to fetch artwork.
-        // This leverages HTTP connection pooling and keep-alive, eliminating the overhead
-        // of establishing a new TCP/TLS connection for every single artwork request.
-        let client = self.http_client.clone();
 
         tokio::spawn(async move {
             let timeout_duration = std::time::Duration::from_secs(3);
             let mut artwork_url = None;
 
             if let Ok(Ok(response)) =
-                tokio::time::timeout(timeout_duration, client.get(&url).send()).await
+                tokio::time::timeout(timeout_duration, reqwest::get(url)).await
             {
                 if let Ok(Ok(json)) =
                     tokio::time::timeout(timeout_duration, response.json::<serde_json::Value>())
