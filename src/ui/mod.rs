@@ -461,12 +461,7 @@ impl App {
                 dur_secs / 60,
                 dur_secs % 60
             );
-            cache.gauge_label = format!(
-                " {}s/{}s | {:02}% ",
-                pos_secs,
-                dur_secs,
-                progress_percent
-            );
+            cache.gauge_label = format!(" {}s/{}s | {:02}% ", pos_secs, dur_secs, progress_percent);
             cache.progress_percent = progress_percent;
             self.metadata_cache = Some(cache);
         } else {
@@ -1064,8 +1059,8 @@ mod tests {
     use crate::player::{MediaPlayer, PlaybackState, RepeatMode, Track};
     use async_trait::async_trait;
     use ratatui::backend::TestBackend;
-    use std::time::Duration;
     use ratatui::Terminal;
+    use std::time::Duration;
 
     struct MockPlayer {
         volume: u8,
