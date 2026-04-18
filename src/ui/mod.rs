@@ -9,7 +9,6 @@ use ratatui::{
 };
 use std::borrow::Cow;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::task::JoinHandle;
 
 use crate::artwork::converter::ArtworkConverter;
@@ -449,15 +448,23 @@ impl App {
             } else {
                 0
             };
+            let pos_secs = track.position.as_secs();
+            let dur_secs = track.duration.as_secs();
+
+            // ⚡ Bolt Optimization:
+            // Inline duration formatting logic to avoid intermediate String allocations.
+            // Using a single format! macro prevents ~4 heap allocations per update tick.
             cache.duration_str = format!(
-                "{} / {}",
-                format_duration(track.position),
-                format_duration(track.duration)
+                "{:02}:{:02} / {:02}:{:02}",
+                pos_secs / 60,
+                pos_secs % 60,
+                dur_secs / 60,
+                dur_secs % 60
             );
             cache.gauge_label = format!(
-                " {}/{} | {:02}% ",
-                format_duration_seconds(track.position),
-                format_duration_seconds(track.duration),
+                " {}s/{}s | {:02}% ",
+                pos_secs,
+                dur_secs,
                 progress_percent
             );
             cache.progress_percent = progress_percent;
@@ -1029,18 +1036,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
 }
 
-fn format_duration_seconds(duration: Duration) -> String {
-    let total_seconds = duration.as_secs();
-    format!("{}s", total_seconds)
-}
-
-fn format_duration(duration: Duration) -> String {
-    let total_seconds = duration.as_secs();
-    let minutes = total_seconds / 60;
-    let seconds = total_seconds % 60;
-    format!("{:02}:{:02}", minutes, seconds)
-}
-
 // Optimized: Uses iterator chaining/cycling to avoid intermediate Vec<char> and format! allocations.
 // Benchmark: ~32% speedup (329ms vs 484ms for 100k iters).
 fn scroll_text<'a>(text: &'a str, width: usize, frame: u32) -> Cow<'a, str> {
@@ -1069,6 +1064,7 @@ mod tests {
     use crate::player::{MediaPlayer, PlaybackState, RepeatMode, Track};
     use async_trait::async_trait;
     use ratatui::backend::TestBackend;
+    use std::time::Duration;
     use ratatui::Terminal;
 
     struct MockPlayer {
