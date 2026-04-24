@@ -9,7 +9,7 @@ use ratatui::{
 };
 use std::borrow::Cow;
 use std::sync::Arc;
-use std::time::Duration;
+
 use tokio::task::JoinHandle;
 
 use crate::artwork::converter::ArtworkConverter;
@@ -449,17 +449,18 @@ impl App {
             } else {
                 0
             };
+            let pos_secs = track.position.as_secs();
+            let pos_mins = pos_secs / 60;
+            let pos_rem_secs = pos_secs % 60;
+            let dur_secs = track.duration.as_secs();
+            let dur_mins = dur_secs / 60;
+            let dur_rem_secs = dur_secs % 60;
+
             cache.duration_str = format!(
-                "{} / {}",
-                format_duration(track.position),
-                format_duration(track.duration)
+                "{:02}:{:02} / {:02}:{:02}",
+                pos_mins, pos_rem_secs, dur_mins, dur_rem_secs
             );
-            cache.gauge_label = format!(
-                " {}/{} | {:02}% ",
-                format_duration_seconds(track.position),
-                format_duration_seconds(track.duration),
-                progress_percent
-            );
+            cache.gauge_label = format!(" {}s/{}s | {:02}% ", pos_secs, dur_secs, progress_percent);
             cache.progress_percent = progress_percent;
             self.metadata_cache = Some(cache);
         } else {
@@ -1029,18 +1030,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
 }
 
-fn format_duration_seconds(duration: Duration) -> String {
-    let total_seconds = duration.as_secs();
-    format!("{}s", total_seconds)
-}
-
-fn format_duration(duration: Duration) -> String {
-    let total_seconds = duration.as_secs();
-    let minutes = total_seconds / 60;
-    let seconds = total_seconds % 60;
-    format!("{:02}:{:02}", minutes, seconds)
-}
-
 // Optimized: Uses iterator chaining/cycling to avoid intermediate Vec<char> and format! allocations.
 // Benchmark: ~32% speedup (329ms vs 484ms for 100k iters).
 fn scroll_text<'a>(text: &'a str, width: usize, frame: u32) -> Cow<'a, str> {
@@ -1066,6 +1055,7 @@ fn scroll_text<'a>(text: &'a str, width: usize, frame: u32) -> Cow<'a, str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
     use crate::player::{MediaPlayer, PlaybackState, RepeatMode, Track};
     use async_trait::async_trait;
     use ratatui::backend::TestBackend;
