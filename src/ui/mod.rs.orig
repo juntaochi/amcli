@@ -448,8 +448,6 @@ impl App {
             } else {
                 0
             };
-
-            // Optimized: Inlined duration math to eliminate 4 intermediate String allocations per tick
             let pos_secs = track.position.as_secs();
             let pos_mins = pos_secs / 60;
             let pos_rem = pos_secs % 60;
