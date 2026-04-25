@@ -460,14 +460,9 @@ impl App {
 
             cache.duration_str = format!(
                 "{:02}:{:02} / {:02}:{:02}",
-                pos_mins, pos_rem,
-                dur_mins, dur_rem
+                pos_mins, pos_rem, dur_mins, dur_rem
             );
-            cache.gauge_label = format!(
-                " {}s/{}s | {:02}% ",
-                pos_secs, dur_secs,
-                progress_percent
-            );
+            cache.gauge_label = format!(" {}s/{}s | {:02}% ", pos_secs, dur_secs, progress_percent);
             cache.progress_percent = progress_percent;
             self.metadata_cache = Some(cache);
         } else {
@@ -1061,12 +1056,12 @@ fn scroll_text<'a>(text: &'a str, width: usize, frame: u32) -> Cow<'a, str> {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
     use super::*;
     use crate::player::{MediaPlayer, PlaybackState, RepeatMode, Track};
     use async_trait::async_trait;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use std::time::Duration;
 
     struct MockPlayer {
         volume: u8,
