@@ -1062,9 +1062,9 @@ mod tests {
     use super::*;
     use crate::player::{MediaPlayer, PlaybackState, RepeatMode, Track};
     use async_trait::async_trait;
-    use std::time::Duration;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use std::time::Duration;
 
     struct MockPlayer {
         volume: u8,
