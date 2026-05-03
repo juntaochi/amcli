@@ -1,0 +1,11 @@
+--- src/ui/mod.rs
++++ src/ui/mod.rs
+@@ -451,6 +451,8 @@
+             let pos_secs = track.position.as_secs();
+             let dur_secs = track.duration.as_secs();
+
++            // Bolt Optimization: Inline duration arithmetic directly into single `format!` macros.
++            // This avoids ~4 intermediate `String` heap allocations per TUI tick.
+             cache.duration_str = format!(
+                 "{:02}:{:02} / {:02}:{:02}",
+                 pos_secs / 60,
