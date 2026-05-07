@@ -461,10 +461,7 @@ impl App {
                 dur_secs / 60,
                 dur_secs % 60
             );
-            cache.gauge_label = format!(
-                " {}s/{}s | {:02}% ",
-                pos_secs, dur_secs, progress_percent
-            );
+            cache.gauge_label = format!(" {}s/{}s | {:02}% ", pos_secs, dur_secs, progress_percent);
             cache.progress_percent = progress_percent;
             self.metadata_cache = Some(cache);
         } else {
