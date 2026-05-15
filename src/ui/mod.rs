@@ -1057,8 +1057,8 @@ mod tests {
     use crate::player::{MediaPlayer, PlaybackState, RepeatMode, Track};
     use async_trait::async_trait;
     use ratatui::backend::TestBackend;
-    use std::time::Duration;
     use ratatui::Terminal;
+    use std::time::Duration;
 
     struct MockPlayer {
         volume: u8,
