@@ -962,25 +962,25 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         f.render_widget(gauge, tuner_area);
     }
 
-    let controls = if is_jp {
-        vec![
-            ("▶再生", "SPC"),
-            ("▶▶次", "]"),
-            ("◀◀前", "["),
-            ("音量＋", "+"),
-            ("音量－", "-"),
-            ("消音", "m"),
-            ("電源", "q"),
+    let controls: &[(&str, &str)] = if is_jp {
+        &[
+            (" ▶再生", " [SPC] "),
+            (" ▶▶次", " []] "),
+            (" ◀◀前", " [[] "),
+            (" 音量＋", " [+] "),
+            (" 音量－", " [-] "),
+            (" 消音", " [m] "),
+            (" 電源", " [q] "),
         ]
     } else {
-        vec![
-            ("PLAY", "SPC"),
-            ("SKIP", "]"),
-            ("PREV", "["),
-            ("VOL+", "+"),
-            ("VOL-", "-"),
-            ("MUTE", "m"),
-            ("EXIT", "q"),
+        &[
+            (" PLAY", " [SPC] "),
+            (" SKIP", " []] "),
+            (" PREV", " [[] "),
+            (" VOL+", " [+] "),
+            (" VOL-", " [-] "),
+            (" MUTE", " [m] "),
+            (" EXIT", " [q] "),
         ]
     };
 

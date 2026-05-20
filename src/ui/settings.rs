@@ -5,6 +5,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragraph},
     Frame,
 };
+use std::borrow::Cow;
 
 use crate::config::Language;
 use crate::ui::Theme;
@@ -236,43 +237,43 @@ impl SettingsMenu {
             }
 
             let is_selected = i == self.selected_index;
-            let (label, value) = match item {
+            let (label, value): (&'static str, Cow<'static, str>) = match item {
                 SettingsItem::Language { current } => {
                     let lang_str = match current {
-                        Language::English => "English",
-                        Language::Japanese => "日本語",
+                        Language::English => " English ",
+                        Language::Japanese => " 日本語 ",
                     };
-                    ("Language / 言語", lang_str.to_string())
+                    ("  Language / 言語: ", Cow::Borrowed(lang_str))
                 }
                 SettingsItem::Theme {
                     current_index,
                     total_themes,
                 } => (
-                    "Theme / テーマ",
-                    format!("{} / {}", current_index + 1, total_themes),
+                    "  Theme / テーマ: ",
+                    Cow::Owned(format!(" {} / {} ", current_index + 1, total_themes)),
                 ),
                 SettingsItem::Album { enabled } => {
                     let status = if *enabled {
-                        "ON / オン"
+                        " ON / オン "
                     } else {
-                        "OFF / オフ"
+                        " OFF / オフ "
                     };
-                    ("Album Artwork / アルバム", status.to_string())
+                    ("  Album Artwork / アルバム: ", Cow::Borrowed(status))
                 }
                 SettingsItem::Mosaic { enabled } => {
                     let status = if *enabled {
-                        "ON / オン"
+                        " ON / オン "
                     } else {
-                        "OFF / オフ"
+                        " OFF / オフ "
                     };
-                    ("Mosaic Artwork / モザイク", status.to_string())
+                    ("  Mosaic Artwork / モザイク: ", Cow::Borrowed(status))
                 }
-                SettingsItem::Close => ("Close / 閉じる", String::new()),
+                SettingsItem::Close => ("  Close / 閉じる  ", Cow::Borrowed("")),
             };
 
             let line = if value.is_empty() {
                 vec![Span::styled(
-                    format!("  {}  ", label),
+                    label,
                     if is_selected {
                         Style::default()
                             .fg(theme.bg)
