@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use ratatui::{
     layout::{Alignment, Rect},
     style::{Modifier, Style},
@@ -6,6 +5,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragraph},
     Frame,
 };
+use std::borrow::Cow;
 
 use crate::config::Language;
 use crate::ui::Theme;
