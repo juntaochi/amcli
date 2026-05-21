@@ -1058,11 +1058,11 @@ fn scroll_text<'a>(text: &'a str, width: usize, frame: u32) -> Cow<'a, str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
     use crate::player::{MediaPlayer, PlaybackState, RepeatMode, Track};
     use async_trait::async_trait;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use std::time::Duration;
 
     struct MockPlayer {
         volume: u8,
