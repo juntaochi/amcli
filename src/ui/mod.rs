@@ -962,27 +962,27 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         f.render_widget(gauge, tuner_area);
     }
 
-    let controls = if is_jp {
-        vec![
-            ("▶再生", "SPC"),
-            ("▶▶次", "]"),
-            ("◀◀前", "["),
-            ("音量＋", "+"),
-            ("音量－", "-"),
-            ("消音", "m"),
-            ("電源", "q"),
-        ]
-    } else {
-        vec![
-            ("PLAY", "SPC"),
-            ("SKIP", "]"),
-            ("PREV", "["),
-            ("VOL+", "+"),
-            ("VOL-", "-"),
-            ("MUTE", "m"),
-            ("EXIT", "q"),
-        ]
-    };
+    const CONTROLS_JP: &[(&str, &str)] = &[
+        (" ▶再生", " [SPC] "),
+        (" ▶▶次", " []] "),
+        (" ◀◀前", " [[] "),
+        (" 音量＋", " [+] "),
+        (" 音量－", " [-] "),
+        (" 消音", " [m] "),
+        (" 電源", " [q] "),
+    ];
+
+    const CONTROLS_EN: &[(&str, &str)] = &[
+        (" PLAY", " [SPC] "),
+        (" SKIP", " []] "),
+        (" PREV", " [[] "),
+        (" VOL+", " [+] "),
+        (" VOL-", " [-] "),
+        (" MUTE", " [m] "),
+        (" EXIT", " [q] "),
+    ];
+
+    let controls = if is_jp { CONTROLS_JP } else { CONTROLS_EN };
 
     let btn_width = control_area.width / controls.len() as u16;
     let btn_layout = Layout::default()
@@ -994,12 +994,12 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         if i < btn_layout.len() {
             let btn_text = Line::from(vec![
                 Span::styled(
-                    format!(" {}", label),
+                    *label,
                     Style::default()
                         .fg(theme.primary)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(format!(" [{}] ", key), Style::default().fg(theme.dim)),
+                Span::styled(*key, Style::default().fg(theme.dim)),
             ]);
 
             let mut btn_block = Block::default()
