@@ -621,8 +621,10 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         let inner = chassis_block.inner(area);
         f.render_widget(chassis_block, area);
 
+        // ⚡ Bolt Optimization: Using Block instead of Paragraph::new(" ".repeat(...)) avoids
+        // dozens of string heap allocations per frame when drawing these background scanlines.
         for y in (inner.top()..inner.bottom()).step_by(2) {
-            let line = Paragraph::new(" ".repeat(inner.width as usize)).style(
+            let line = Block::default().style(
                 Style::default()
                     .bg(Color::Rgb(5, 5, 5))
                     .add_modifier(Modifier::DIM),
