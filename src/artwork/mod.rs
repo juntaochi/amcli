@@ -2,9 +2,14 @@ pub mod cache;
 pub mod converter;
 
 use anyhow::Result;
-use image::{DynamicImage, GenericImageView, Rgba};
+use image::{imageops::FilterType, DynamicImage, Rgba, RgbaImage};
 use ratatui::style::Color;
 use std::path::PathBuf;
+
+const PIXELATION_TARGET_BLOCKS: u32 = 96;
+const PIXELATION_MIN_BLOCK_SIZE: u32 = 4;
+const PIXELATION_MAX_BLOCK_SIZE: u32 = 10;
+const PIXELATION_CONTRAST: f32 = 1.08;
 
 #[derive(Clone)]
 pub struct ArtworkManager {
@@ -59,21 +64,40 @@ impl ArtworkManager {
 }
 
 fn apply_pixelation(img: DynamicImage) -> DynamicImage {
-    // Simple pixelation effect - reduce resolution then scale back up
-    let (width, height) = img.dimensions();
-    let scale_factor = 8; // Adjust for more/less pixelation
+    let source = img.to_rgba8();
+    let (width, height) = source.dimensions();
+    let block_size = pixelation_block_size(width, height);
+    let small_width = ceil_div(width, block_size);
+    let small_height = ceil_div(height, block_size);
 
-    let small_width = (width / scale_factor).max(1);
-    let small_height = (height / scale_factor).max(1);
+    let small = image::imageops::resize(&source, small_width, small_height, FilterType::CatmullRom);
+    let sharpened = image::imageops::unsharpen(&small, 0.7, 2);
+    let boosted = boost_contrast(sharpened);
+    let output = image::imageops::resize(&boosted, width, height, FilterType::Nearest);
 
-    let small = image::imageops::resize(
-        &img,
-        small_width,
-        small_height,
-        image::imageops::FilterType::Nearest,
-    );
+    DynamicImage::ImageRgba8(output)
+}
 
-    image::imageops::resize(&small, width, height, image::imageops::FilterType::Nearest).into()
+fn pixelation_block_size(width: u32, height: u32) -> u32 {
+    (width.max(height) / PIXELATION_TARGET_BLOCKS)
+        .clamp(PIXELATION_MIN_BLOCK_SIZE, PIXELATION_MAX_BLOCK_SIZE)
+}
+
+fn ceil_div(value: u32, divisor: u32) -> u32 {
+    value.div_ceil(divisor).max(1)
+}
+
+fn boost_contrast(mut img: RgbaImage) -> RgbaImage {
+    for pixel in img.pixels_mut() {
+        pixel[0] = contrast_channel(pixel[0]);
+        pixel[1] = contrast_channel(pixel[1]);
+        pixel[2] = contrast_channel(pixel[2]);
+    }
+    img
+}
+
+fn contrast_channel(value: u8) -> u8 {
+    (((value as f32 - 128.0) * PIXELATION_CONTRAST) + 128.0).clamp(0.0, 255.0) as u8
 }
 
 fn get_relative_luminance(r: f32, g: f32, b: f32) -> f32 {
@@ -181,4 +205,47 @@ fn extract_rgb(color: Color) -> (f32, f32, f32) {
 #[allow(dead_code)]
 fn lerp(a: f32, b: f32, t: f32) -> u8 {
     (a + (b - a) * t).clamp(0.0, 255.0) as u8
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn album_sized_images_use_finer_blocks_than_the_old_fixed_mosaic() {
+        assert_eq!(pixelation_block_size(600, 600), 6);
+    }
+
+    #[test]
+    fn pixelation_blends_high_frequency_detail_instead_of_corner_sampling() {
+        let mut img = RgbaImage::new(96, 96);
+
+        for y in 0..96 {
+            for x in 0..96 {
+                let color = if (x + y) % 2 == 0 {
+                    Rgba([0, 0, 0, 255])
+                } else {
+                    Rgba([255, 255, 255, 255])
+                };
+                img.put_pixel(x, y, color);
+            }
+        }
+
+        let pixelated = apply_pixelation(DynamicImage::ImageRgba8(img)).to_rgba8();
+        let sample = pixelated.get_pixel(0, 0);
+
+        assert!(sample[0] > 32 && sample[0] < 223);
+        assert!(sample[1] > 32 && sample[1] < 223);
+        assert!(sample[2] > 32 && sample[2] < 223);
+        assert_eq!(sample[3], 255);
+    }
+
+    #[test]
+    fn pixelation_preserves_image_dimensions() {
+        let img = RgbaImage::from_pixel(97, 53, Rgba([64, 128, 192, 255]));
+        let pixelated = apply_pixelation(DynamicImage::ImageRgba8(img));
+
+        assert_eq!(pixelated.width(), 97);
+        assert_eq!(pixelated.height(), 53);
+    }
 }

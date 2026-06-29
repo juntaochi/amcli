@@ -152,6 +152,7 @@ pub struct App {
     lyrics_task: Option<JoinHandle<Result<Option<Lyrics>>>>,
     config: crate::config::Config,
     settings_menu: SettingsMenu,
+    needs_full_repaint: bool,
 }
 
 impl App {
@@ -231,6 +232,7 @@ impl App {
             lyrics_task: None,
             config,
             settings_menu,
+            needs_full_repaint: false,
             metadata_cache: None,
         })
     }
@@ -318,7 +320,11 @@ impl App {
     }
 
     pub fn toggle_settings_menu(&mut self) {
+        let was_open = self.settings_menu.is_open;
         self.settings_menu.toggle();
+        if was_open {
+            self.needs_full_repaint = true;
+        }
     }
 
     pub fn is_settings_open(&self) -> bool {
@@ -326,7 +332,14 @@ impl App {
     }
 
     pub fn close_settings(&mut self) {
+        if self.settings_menu.is_open {
+            self.needs_full_repaint = true;
+        }
         self.settings_menu.close();
+    }
+
+    pub fn take_needs_full_repaint(&mut self) -> bool {
+        std::mem::take(&mut self.needs_full_repaint)
     }
 
     pub fn settings_navigate_up(&mut self) {
@@ -378,6 +391,7 @@ impl App {
                 }
                 SettingsItem::Close => {
                     self.settings_menu.close();
+                    self.needs_full_repaint = true;
                 }
             }
         }
@@ -1262,5 +1276,17 @@ mod tests {
         assert!(content.contains("TEST"));
         assert!(content.contains("SONG"));
         assert!(content.contains("ARTIST"));
+    }
+
+    #[tokio::test]
+    async fn closing_settings_requests_one_full_repaint() {
+        let player = Box::new(MockPlayer { volume: 70 });
+        let mut app = test_app(player).await;
+
+        app.toggle_settings_menu();
+        app.close_settings();
+
+        assert!(app.take_needs_full_repaint());
+        assert!(!app.take_needs_full_repaint());
     }
 }

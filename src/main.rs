@@ -74,6 +74,10 @@ where
     let update_interval = std::time::Duration::from_millis(500);
 
     loop {
+        if app.take_needs_full_repaint() {
+            terminal.clear()?;
+        }
+
         terminal.draw(|f| ui::draw(f, &mut app))?;
 
         if event::poll(std::time::Duration::from_millis(50))? {
