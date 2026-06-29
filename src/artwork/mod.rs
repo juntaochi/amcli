@@ -2,14 +2,11 @@ pub mod cache;
 pub mod converter;
 
 use anyhow::Result;
-use image::{imageops::FilterType, DynamicImage, Rgba, RgbaImage};
+use image::{DynamicImage, Rgba, RgbaImage};
 use ratatui::style::Color;
 use std::path::PathBuf;
 
-const PIXELATION_TARGET_BLOCKS: u32 = 96;
-const PIXELATION_MIN_BLOCK_SIZE: u32 = 4;
-const PIXELATION_MAX_BLOCK_SIZE: u32 = 10;
-const PIXELATION_CONTRAST: f32 = 1.08;
+const PIXELATION_BLOCK_SIZE: u32 = 8;
 
 #[derive(Clone)]
 pub struct ArtworkManager {
@@ -67,37 +64,65 @@ fn apply_pixelation(img: DynamicImage) -> DynamicImage {
     let source = img.to_rgba8();
     let (width, height) = source.dimensions();
     let block_size = pixelation_block_size(width, height);
-    let small_width = ceil_div(width, block_size);
-    let small_height = ceil_div(height, block_size);
+    let mut output = RgbaImage::new(width, height);
 
-    let small = image::imageops::resize(&source, small_width, small_height, FilterType::CatmullRom);
-    let sharpened = image::imageops::unsharpen(&small, 0.7, 2);
-    let boosted = boost_contrast(sharpened);
-    let output = image::imageops::resize(&boosted, width, height, FilterType::Nearest);
+    for block_y in (0..height).step_by(block_size as usize) {
+        for block_x in (0..width).step_by(block_size as usize) {
+            let x_end = (block_x + block_size).min(width);
+            let y_end = (block_y + block_size).min(height);
+            let color = average_block_color(&source, block_x, block_y, x_end, y_end);
+
+            for y in block_y..y_end {
+                for x in block_x..x_end {
+                    output.put_pixel(x, y, color);
+                }
+            }
+        }
+    }
 
     DynamicImage::ImageRgba8(output)
 }
 
-fn pixelation_block_size(width: u32, height: u32) -> u32 {
-    (width.max(height) / PIXELATION_TARGET_BLOCKS)
-        .clamp(PIXELATION_MIN_BLOCK_SIZE, PIXELATION_MAX_BLOCK_SIZE)
+fn pixelation_block_size(_width: u32, _height: u32) -> u32 {
+    PIXELATION_BLOCK_SIZE
 }
 
-fn ceil_div(value: u32, divisor: u32) -> u32 {
-    value.div_ceil(divisor).max(1)
-}
+fn average_block_color(
+    img: &RgbaImage,
+    x_start: u32,
+    y_start: u32,
+    x_end: u32,
+    y_end: u32,
+) -> Rgba<u8> {
+    let mut sum_r = 0_u64;
+    let mut sum_g = 0_u64;
+    let mut sum_b = 0_u64;
+    let mut sum_a = 0_u64;
+    let mut count = 0_u64;
 
-fn boost_contrast(mut img: RgbaImage) -> RgbaImage {
-    for pixel in img.pixels_mut() {
-        pixel[0] = contrast_channel(pixel[0]);
-        pixel[1] = contrast_channel(pixel[1]);
-        pixel[2] = contrast_channel(pixel[2]);
+    for y in y_start..y_end {
+        for x in x_start..x_end {
+            let pixel = img.get_pixel(x, y);
+            let alpha = pixel[3] as u64;
+
+            sum_r += pixel[0] as u64 * alpha;
+            sum_g += pixel[1] as u64 * alpha;
+            sum_b += pixel[2] as u64 * alpha;
+            sum_a += alpha;
+            count += 1;
+        }
     }
-    img
-}
 
-fn contrast_channel(value: u8) -> u8 {
-    (((value as f32 - 128.0) * PIXELATION_CONTRAST) + 128.0).clamp(0.0, 255.0) as u8
+    if count == 0 || sum_a == 0 {
+        return Rgba([0, 0, 0, 0]);
+    }
+
+    let avg_a = ((sum_a + count / 2) / count) as u8;
+    let avg_r = ((sum_r + sum_a / 2) / sum_a) as u8;
+    let avg_g = ((sum_g + sum_a / 2) / sum_a) as u8;
+    let avg_b = ((sum_b + sum_a / 2) / sum_a) as u8;
+
+    Rgba([avg_r, avg_g, avg_b, avg_a])
 }
 
 fn get_relative_luminance(r: f32, g: f32, b: f32) -> f32 {
@@ -212,17 +237,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn album_sized_images_use_finer_blocks_than_the_old_fixed_mosaic() {
-        assert_eq!(pixelation_block_size(600, 600), 6);
+    fn album_sized_images_use_the_original_mosaic_block_size() {
+        assert_eq!(pixelation_block_size(600, 600), 8);
     }
 
     #[test]
-    fn pixelation_blends_high_frequency_detail_instead_of_corner_sampling() {
-        let mut img = RgbaImage::new(96, 96);
+    fn pixelation_averages_block_colours_without_filters() {
+        let mut img = RgbaImage::new(PIXELATION_BLOCK_SIZE, PIXELATION_BLOCK_SIZE);
 
-        for y in 0..96 {
-            for x in 0..96 {
-                let color = if (x + y) % 2 == 0 {
+        for y in 0..PIXELATION_BLOCK_SIZE {
+            for x in 0..PIXELATION_BLOCK_SIZE {
+                let color = if x < PIXELATION_BLOCK_SIZE / 2 {
                     Rgba([0, 0, 0, 255])
                 } else {
                     Rgba([255, 255, 255, 255])
@@ -232,12 +257,33 @@ mod tests {
         }
 
         let pixelated = apply_pixelation(DynamicImage::ImageRgba8(img)).to_rgba8();
-        let sample = pixelated.get_pixel(0, 0);
 
-        assert!(sample[0] > 32 && sample[0] < 223);
-        assert!(sample[1] > 32 && sample[1] < 223);
-        assert!(sample[2] > 32 && sample[2] < 223);
-        assert_eq!(sample[3], 255);
+        for pixel in pixelated.pixels() {
+            assert_eq!(*pixel, Rgba([128, 128, 128, 255]));
+        }
+    }
+
+    #[test]
+    fn pixelation_preserves_independent_partial_edge_blocks() {
+        let mut img = RgbaImage::new(PIXELATION_BLOCK_SIZE + 1, 1);
+
+        for x in 0..PIXELATION_BLOCK_SIZE {
+            let color = if x < PIXELATION_BLOCK_SIZE / 2 {
+                Rgba([0, 0, 0, 255])
+            } else {
+                Rgba([255, 255, 255, 255])
+            };
+            img.put_pixel(x, 0, color);
+        }
+        img.put_pixel(PIXELATION_BLOCK_SIZE, 0, Rgba([255, 0, 0, 255]));
+
+        let pixelated = apply_pixelation(DynamicImage::ImageRgba8(img)).to_rgba8();
+
+        assert_eq!(*pixelated.get_pixel(0, 0), Rgba([128, 128, 128, 255]));
+        assert_eq!(
+            *pixelated.get_pixel(PIXELATION_BLOCK_SIZE, 0),
+            Rgba([255, 0, 0, 255])
+        );
     }
 
     #[test]
