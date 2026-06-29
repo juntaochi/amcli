@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-06-29
+
+### Fixed
+- **Artwork overlay repaint** — Force a full terminal repaint after closing settings overlays so terminal graphics protocol artwork does not retain stale menu content.
+
+### Changed
+- **Mosaic rendering** — Restore the selected fixed 8px alpha-weighted averaged mosaic style without sharpening, contrast, saturation, or resampling filters.
+
 ## [0.2.0] - 2026-06-29
 
 ### Performance
@@ -162,6 +170,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/juntaochi/amcli/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/juntaochi/amcli/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/juntaochi/amcli/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/juntaochi/amcli/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/juntaochi/amcli/releases/tag/v0.1.0
