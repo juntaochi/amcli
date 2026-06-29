@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-03-23
+## [0.2.0] - 2026-06-29
 
 ### Performance
 - **Batched AppleScript IPC** — Combine player state, volume, and track metadata into a single `osascript` call, halving process overhead during the 500ms UI update loop
@@ -16,15 +16,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Cow-based scroll_text** — Return `Cow::Borrowed` when text fits within column width, avoiding heap allocation for non-scrolling text
 
 ### Fixed
+- **Metadata rendering dependency** — Render UI metadata directly from track state so display updates do not depend on stale optimization cache state.
 - **Artwork display** — Restored synchronous artwork fetch that was broken by an async fire-and-forget pattern which always returned `None` on first call
 - **Lyrics rendering** — Decoupled lyrics display from metadata cache check so lyrics render independently of the optimization cache
 - **Artwork protocol converter** — Fixed panic in artwork protocol conversion
+- **Terminal resilience** — Harden mutex poison handling, terminal panic recovery, and error logging paths.
+- **Compact layout polish** — Tighten artwork/info spacing, metadata height, and lyrics gaps across constrained viewports.
 
 ### Added
+- **Real artwork fetching pipeline** — Download and cache Apple Music artwork instead of relying only on placeholder or previously cached data.
+- **Expanded lyrics fetching** — Improve local, LRCLIB, and Netease provider integration so synced lyrics are fetched and surfaced more reliably.
+- **Responsive playback layout** — Collapse controls and then the progress bar on short terminal heights to keep the now-playing view usable.
+- **Graduated lyrics dimming** — Add three-tier dimming around the current lyric line for better scanability during playback.
 - **PR validation workflow** (`pr-validate-merge.yml`) — Tests the merged result against latest `main` (not just the PR branch), with Cargo caching, concurrency groups, and auto-merge support via `auto-merge` label
 - **PR conflict scanner** (`pr-conflict-scan.yml`) — Daily scan of all open PRs for merge conflicts and file overlaps, reports to a tracking GitHub Issue
 - **Local PR triage script** (`scripts/pr-triage.sh`) — Analyzes all open PRs, finds safe sequential merge order, supports `--auto-merge` and `--close-conflicts`
 - **CLAUDE.md** — Project conventions and commands for AI-assisted development
+
+### Changed
+- **UI layout system** — Introduce shared spacing constants and modernize the metadata/lyrics split for more consistent terminal layouts.
+- **Artwork presentation** — Center artwork within its region, constrain it by both width and height, and preserve visible margins across terminal sizes.
+- **Control spacing** — Distribute playback controls evenly with flexible layout constraints.
+- **Renderer structure** — Split the main draw path into smaller section renderers for easier maintenance without changing the top-level TUI behavior.
 
 ## [0.1.0] - 2026-01-24
 
@@ -113,7 +126,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Future Releases
 
-### [0.2.0] - Planned (Phase 4-5)
+### [0.3.0] - Planned (Phase 4-5)
 
 #### Phase 4: Advanced Features
 - Playlist management and editing

@@ -171,13 +171,11 @@ impl App {
         player: Box<dyn MediaPlayer>,
         config: crate::config::Config,
     ) -> Result<Self> {
-        let volume = 50;
-        let cache_dir = dirs::cache_dir()
-            .unwrap_or_else(std::env::temp_dir)
-            .join("amcli/artwork");
+        Self::with_player_config_and_lyrics_manager(player, config, Self::default_lyrics_manager())
+            .await
+    }
 
-        tokio::fs::create_dir_all(&cache_dir).await.ok();
-
+    fn default_lyrics_manager() -> LyricsManager {
         let lyrics_dir = dirs::home_dir()
             .unwrap_or_else(std::env::temp_dir)
             .join("Music/Lyrics");
@@ -186,6 +184,21 @@ impl App {
         lyrics_manager.add_provider(Box::new(LocalProvider::new(lyrics_dir)));
         lyrics_manager.add_provider(Box::new(LrclibProvider::new()));
         lyrics_manager.add_provider(Box::new(NeteaseProvider::new()));
+        lyrics_manager
+    }
+
+    async fn with_player_config_and_lyrics_manager(
+        player: Box<dyn MediaPlayer>,
+        config: crate::config::Config,
+        lyrics_manager: LyricsManager,
+    ) -> Result<Self> {
+        let volume = 50;
+        let cache_dir = dirs::cache_dir()
+            .unwrap_or_else(std::env::temp_dir)
+            .join("amcli/artwork");
+
+        tokio::fs::create_dir_all(&cache_dir).await.ok();
+
         let lyrics_manager = Arc::new(lyrics_manager);
 
         let settings_menu = SettingsMenu::new(
@@ -1212,10 +1225,20 @@ mod tests {
         }
     }
 
+    async fn test_app(player: Box<dyn MediaPlayer>) -> App {
+        App::with_player_config_and_lyrics_manager(
+            player,
+            crate::config::Config::default(),
+            LyricsManager::new(1),
+        )
+        .await
+        .unwrap()
+    }
+
     #[tokio::test]
     async fn test_app_initialization() {
         let player = Box::new(MockPlayer { volume: 70 });
-        let mut app = App::with_player(player).await.unwrap();
+        let mut app = test_app(player).await;
         assert_eq!(app.get_volume(), 50);
         assert!(!app.is_muted());
 
@@ -1226,7 +1249,7 @@ mod tests {
     #[tokio::test]
     async fn test_ui_rendering() {
         let player = Box::new(MockPlayer { volume: 70 });
-        let mut app = App::with_player(player).await.unwrap();
+        let mut app = test_app(player).await;
         app.update().await.unwrap();
 
         let backend = TestBackend::new(120, 40);

@@ -24,13 +24,20 @@ impl LrclibProvider {
         }
     }
 
-    fn headers(&self) -> HeaderMap {
+    fn headers() -> HeaderMap {
         let mut headers = HeaderMap::new();
         headers.insert(
             USER_AGENT,
-            HeaderValue::from_static("AMCLI v1.0.0 (https://github.com/juntaochi/amcli)"),
+            HeaderValue::from_static(concat!(
+                "AMCLI v",
+                env!("CARGO_PKG_VERSION"),
+                " (https://github.com/juntaochi/amcli)"
+            )),
         );
-        headers.insert("Lrclib-Client", HeaderValue::from_static("AMCLI v1.0.0"));
+        headers.insert(
+            "Lrclib-Client",
+            HeaderValue::from_static(concat!("AMCLI v", env!("CARGO_PKG_VERSION"))),
+        );
         headers
     }
 
@@ -72,7 +79,7 @@ impl LyricsProvider for LrclibProvider {
         let precise_result = self
             .client
             .get(&url_precise)
-            .headers(self.headers())
+            .headers(Self::headers())
             .send()
             .await;
 
@@ -98,7 +105,7 @@ impl LyricsProvider for LrclibProvider {
         let loose_result = self
             .client
             .get(&url_loose)
-            .headers(self.headers())
+            .headers(Self::headers())
             .send()
             .await;
 
@@ -127,5 +134,25 @@ impl LyricsProvider for LrclibProvider {
 
     fn name(&self) -> &'static str {
         "lrclib"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn headers_use_crate_version() {
+        let headers = LrclibProvider::headers();
+        let version = env!("CARGO_PKG_VERSION");
+
+        assert_eq!(
+            headers.get(USER_AGENT).unwrap().to_str().unwrap(),
+            format!("AMCLI v{} (https://github.com/juntaochi/amcli)", version)
+        );
+        assert_eq!(
+            headers.get("Lrclib-Client").unwrap().to_str().unwrap(),
+            format!("AMCLI v{}", version)
+        );
     }
 }
