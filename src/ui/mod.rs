@@ -14,9 +14,7 @@ use tokio::task::JoinHandle;
 
 use crate::artwork::converter::ArtworkConverter;
 use crate::artwork::ArtworkManager;
-use crate::lyrics::{
-    local::LocalProvider, lrclib::LrclibProvider, netease::NeteaseProvider, Lyrics, LyricsManager,
-};
+use crate::lyrics::{lrclib::LrclibProvider, netease::NeteaseProvider, Lyrics, LyricsManager};
 use crate::player::{apple_music::AppleMusicController, MediaPlayer, RepeatMode, Track};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::StatefulImage;
@@ -194,12 +192,7 @@ impl App {
     }
 
     fn default_lyrics_manager() -> LyricsManager {
-        let lyrics_dir = dirs::home_dir()
-            .unwrap_or_else(std::env::temp_dir)
-            .join("Music/Lyrics");
-
         let mut lyrics_manager = LyricsManager::new(20);
-        lyrics_manager.add_provider(Box::new(LocalProvider::new(lyrics_dir)));
         lyrics_manager.add_provider(Box::new(LrclibProvider::new()));
         lyrics_manager.add_provider(Box::new(NeteaseProvider::new()));
         lyrics_manager

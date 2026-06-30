@@ -63,8 +63,7 @@
 #### 📝 歌词功能 (Phase 3 - 已完成)
 - **实时同步显示**：毫秒级精度的 LRC 歌词同步
 - **多源智能获取**：
-  - 本地优先：自动搜索 `~/Music/Lyrics` 下的 `.lrc` 文件
-  - 在线备选：LRCLIB 与网易云音乐 API 自动搜索匹配
+  - 双源竞速：首次获取时并发查询 LRCLIB 与网易云音乐，取更快返回的结果，并将更快的源记为本次会话首选
   - 候选校验：按歌名、歌手、专辑与时长筛选，支持平台间艺名本地化差异
   - LRU 缓存：按歌曲版本加速重复查询
 - **自动滚动视图**：当前歌词行始终居中高亮
@@ -261,8 +260,7 @@ show_help_on_start = true
 #### 📝 Lyrics Features (Phase 3 - Completed)
 - **Real-time Synchronization**: Millisecond-precision LRC lyrics sync
 - **Multi-source Smart Fetching**:
-  - Local Priority: Auto-search `~/Music/Lyrics` for `.lrc` files
-  - Online Fallback: LRCLIB and Netease Cloud Music API auto-matching
+  - Source Racing: On first fetch, queries LRCLIB and Netease in parallel, takes whichever returns first, and remembers the faster source as the session's primary
   - Candidate Validation: Filters by title, artist, album, and duration while allowing localized artist aliases across platforms
   - LRU Caching: Version-aware accelerated repeated queries
 - **Auto-scrolling View**: Current lyric line always centered and highlighted
