@@ -991,7 +991,7 @@ fn draw_controls(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) {
             ("◀◀前", "["),
             ("音量＋", "+"),
             ("音量－", "-"),
-            ("消音", "m"),
+            ("テーマ", "t"),
             ("電源", "q"),
         ]
     } else {
@@ -1001,7 +1001,7 @@ fn draw_controls(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) {
             ("PREV", "["),
             ("VOL+", "+"),
             ("VOL-", "-"),
-            ("MUTE", "m"),
+            ("THEME", "t"),
             ("EXIT", "q"),
         ]
     };
