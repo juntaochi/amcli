@@ -12,14 +12,8 @@
 
 </div>
 
-<div align="center">
-  <img src="assets/screenshot_1.png" width="30%" />
-  <img src="assets/screenshot_2.png" width="30%" />
-  <img src="assets/screenshot_3.png" width="30%" />
-  <img src="assets/screenshot_4.png" width="30%" />
-  <img src="assets/screenshot_5.png" width="30%" />
-  <img src="assets/screenshot_6.png" width="30%" />
-  <img src="assets/screenshot_7.png" width="30%" />
+<img src="assets/screenshot_1.png" width="100%" />
+
 </div>
 
 ---
@@ -61,6 +55,11 @@
 - 响应式布局
 - 流畅的动画效果
 
+<div align="center">
+  <img src="assets/screenshot_2.png" width="45%" />
+  <img src="assets/screenshot_3.png" width="45%" />
+</div>
+
 #### 📝 歌词功能 (Phase 3 - 已完成)
 - **实时同步显示**：毫秒级精度的 LRC 歌词同步
 - **多源智能获取**：
@@ -70,6 +69,10 @@
   - LRU 缓存：按歌曲版本加速重复查询
 - **自动滚动视图**：当前歌词行始终居中高亮
 - **完整 LRC 解析**：支持多时间戳、偏移量调整
+
+<div align="center">
+  <img src="assets/screenshot_4.png" width="60%" />
+</div>
 
 #### 🔧 高级功能
 - 播放列表管理
@@ -250,6 +253,11 @@ show_help_on_start = true
 - Responsive layout
 - Smooth animations
 
+<div align="center">
+  <img src="assets/screenshot_5.png" width="45%" />
+  <img src="assets/screenshot_6.png" width="45%" />
+</div>
+
 #### 📝 Lyrics Features (Phase 3 - Completed)
 - **Real-time Synchronization**: Millisecond-precision LRC lyrics sync
 - **Multi-source Smart Fetching**:
@@ -259,6 +267,10 @@ show_help_on_start = true
   - LRU Caching: Version-aware accelerated repeated queries
 - **Auto-scrolling View**: Current lyric line always centered and highlighted
 - **Full LRC Parsing**: Supports multiple timestamps and offset adjustments
+
+<div align="center">
+  <img src="assets/screenshot_7.png" width="60%" />
+</div>
 
 #### 🔧 Advanced Features
 - Playlist management
