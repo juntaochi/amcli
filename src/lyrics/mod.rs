@@ -8,6 +8,7 @@ use std::time::Duration;
 
 pub mod local;
 pub mod lrclib;
+pub(crate) mod matching;
 pub mod netease;
 pub mod parser;
 pub mod provider;
@@ -68,7 +69,7 @@ impl LyricsManager {
     }
 
     pub async fn get_lyrics(&self, track: &Track) -> Result<Option<Lyrics>> {
-        let cache_key = format!("{}|{}", track.artist, track.name);
+        let cache_key = matching::track_cache_key(track);
 
         // Check cache
         if let Ok(mut cache) = self.cache.lock() {
@@ -117,5 +118,66 @@ impl LyricsManager {
             cache.put(cache_key, None);
         }
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lyrics::provider::LyricsProvider;
+    use async_trait::async_trait;
+
+    struct AlbumEchoProvider;
+
+    #[async_trait]
+    impl LyricsProvider for AlbumEchoProvider {
+        async fn get_lyrics(&self, track: &Track) -> Result<Option<Lyrics>> {
+            Ok(Some(Lyrics {
+                lines: vec![LyricLine {
+                    text: track.album.clone(),
+                    timestamp: Duration::ZERO,
+                }],
+                metadata: HashMap::new(),
+                offset: 0,
+            }))
+        }
+
+        fn priority(&self) -> u8 {
+            1
+        }
+
+        fn name(&self) -> &'static str {
+            "album-echo"
+        }
+    }
+
+    fn track(album: &str, duration_secs: u64) -> Track {
+        Track {
+            name: "Same Song".into(),
+            artist: "Same Artist".into(),
+            album: album.into(),
+            duration: Duration::from_secs(duration_secs),
+            position: Duration::ZERO,
+        }
+    }
+
+    #[tokio::test]
+    async fn cache_distinguishes_same_title_artist_across_album_versions() {
+        let mut manager = LyricsManager::new(4);
+        manager.add_provider(Box::new(AlbumEchoProvider));
+
+        let first = manager
+            .get_lyrics(&track("Studio Album", 240))
+            .await
+            .unwrap()
+            .unwrap();
+        let second = manager
+            .get_lyrics(&track("Live Album", 260))
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(first.lines[0].text, "Studio Album");
+        assert_eq!(second.lines[0].text, "Live Album");
     }
 }
