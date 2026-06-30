@@ -119,6 +119,23 @@ pub const THEMES: &[Theme] = &[
     THEME_TERMINAL_CLEAN,
 ];
 
+fn track_identity_changed(current: Option<&Track>, next: Option<&Track>) -> bool {
+    match (current, next) {
+        (Some(current), Some(next)) => {
+            current.name != next.name
+                || current.artist != next.artist
+                || current.album != next.album
+                || duration_changed(current.duration, next.duration)
+        }
+        (None, Some(_)) => true,
+        _ => false,
+    }
+}
+
+fn duration_changed(current: Duration, next: Duration) -> bool {
+    current.abs_diff(next) > Duration::from_secs(1)
+}
+
 #[derive(Default, Clone)]
 pub struct MetadataCache {
     pub name: String,
@@ -457,11 +474,7 @@ impl App {
             None
         };
 
-        let track_changed = match (&self.current_track, &new_track) {
-            (Some(c), Some(n)) => c.name != n.name || c.artist != n.artist,
-            (None, Some(_)) => true,
-            _ => false,
-        };
+        let track_changed = track_identity_changed(self.current_track.as_ref(), new_track.as_ref());
         tracing::debug!(
             "[UPDATE] track_changed={}, has_lyrics={}, artwork_changed={}",
             track_changed,
@@ -587,8 +600,16 @@ impl App {
                             self.artwork_protocol =
                                 Some(self.artwork_converter.create_protocol(img));
                         }
-                        Ok(Err(e)) => tracing::debug!("Artwork load failed: {}", e),
-                        Err(e) => tracing::warn!("Artwork task panicked: {}", e),
+                        Ok(Err(e)) => {
+                            tracing::debug!("Artwork load failed: {}", e);
+                            self.current_artwork_url = None;
+                            self.artwork_protocol = None;
+                        }
+                        Err(e) => {
+                            tracing::warn!("Artwork task panicked: {}", e);
+                            self.current_artwork_url = None;
+                            self.artwork_protocol = None;
+                        }
                     }
                 }
                 self.is_loading_artwork = false;
@@ -1172,6 +1193,7 @@ mod tests {
 
     struct MockPlayer {
         volume: u8,
+        artwork_url: Option<String>,
     }
 
     #[async_trait]
@@ -1235,8 +1257,15 @@ mod tests {
             Ok(())
         }
         async fn get_artwork_url(&self, _track: &Track) -> Result<Option<String>> {
-            Ok(Some("http://example.com/artwork.jpg".into()))
+            Ok(self.artwork_url.clone())
         }
+    }
+
+    fn mock_player(volume: u8) -> Box<dyn MediaPlayer> {
+        Box::new(MockPlayer {
+            volume,
+            artwork_url: Some("http://example.com/artwork.jpg".into()),
+        })
     }
 
     async fn test_app(player: Box<dyn MediaPlayer>) -> App {
@@ -1251,7 +1280,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_app_initialization() {
-        let player = Box::new(MockPlayer { volume: 70 });
+        let player = mock_player(70);
         let mut app = test_app(player).await;
         assert_eq!(app.get_volume(), 50);
         assert!(!app.is_muted());
@@ -1262,7 +1291,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ui_rendering() {
-        let player = Box::new(MockPlayer { volume: 70 });
+        let player = mock_player(70);
         let mut app = test_app(player).await;
         app.update().await.unwrap();
 
@@ -1280,7 +1309,7 @@ mod tests {
 
     #[tokio::test]
     async fn closing_settings_requests_one_full_repaint() {
-        let player = Box::new(MockPlayer { volume: 70 });
+        let player = mock_player(70);
         let mut app = test_app(player).await;
 
         app.toggle_settings_menu();
@@ -1288,5 +1317,47 @@ mod tests {
 
         assert!(app.take_needs_full_repaint());
         assert!(!app.take_needs_full_repaint());
+    }
+
+    #[test]
+    fn track_identity_change_includes_album_and_duration_versions() {
+        let current = Track {
+            name: "Same Song".into(),
+            artist: "Same Artist".into(),
+            album: "Studio Album".into(),
+            duration: Duration::from_secs(240),
+            position: Duration::ZERO,
+        };
+        let next = Track {
+            album: "Live Album".into(),
+            duration: Duration::from_secs(260),
+            ..current.clone()
+        };
+
+        assert!(track_identity_changed(Some(&current), Some(&next)));
+    }
+
+    #[tokio::test]
+    async fn failed_artwork_load_clears_current_url_so_it_can_retry() {
+        let missing_url = "file:///tmp/amcli-missing-artwork-for-retry-test.png";
+        let player = Box::new(MockPlayer {
+            volume: 70,
+            artwork_url: Some(missing_url.into()),
+        });
+        let mut app = test_app(player).await;
+
+        app.update().await.unwrap();
+        assert_eq!(app.current_artwork_url.as_deref(), Some(missing_url));
+
+        for _ in 0..10 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            app.update().await.unwrap();
+            if app.current_artwork_url.is_none() {
+                break;
+            }
+        }
+
+        assert!(app.current_artwork_url.is_none());
+        assert!(app.artwork_protocol.is_none());
     }
 }

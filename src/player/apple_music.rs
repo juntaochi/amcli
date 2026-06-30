@@ -28,7 +28,9 @@ impl CommandRunner for OsascriptRunner {
 }
 
 use lru::LruCache;
+use sha2::{Digest, Sha256};
 use std::num::NonZeroUsize;
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 pub struct AppleMusicController {
@@ -68,6 +70,59 @@ impl AppleMusicController {
             ))
         }
     }
+
+    async fn export_current_track_artwork(&self, track: &Track) -> Result<Option<String>> {
+        let path = current_track_artwork_path(track);
+        let path_string = path.to_string_lossy();
+        let escaped_path = escape_applescript_string(&path_string);
+        let script = format!(
+            r#"
+            tell application "Music"
+                if player state is stopped then return ""
+                if (count of artworks of current track) is 0 then return ""
+                set artwork_data to data of artwork 1 of current track
+            end tell
+
+            set output_path to "{}"
+            set output_file to POSIX file output_path
+            set file_ref to open for access output_file with write permission
+            try
+                set eof file_ref to 0
+                write artwork_data to file_ref
+                close access file_ref
+            on error err_msg number err_num
+                try
+                    close access file_ref
+                end try
+                error err_msg number err_num
+            end try
+            return output_path
+        "#,
+            escaped_path
+        );
+
+        let exported_path = self.execute_script(&script).await?;
+        if exported_path.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(format!("file://{}", exported_path)))
+        }
+    }
+}
+
+fn current_track_artwork_path(track: &Track) -> PathBuf {
+    let mut hasher = Sha256::new();
+    hasher.update(track.artist.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(track.album.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(track.name.as_bytes());
+    let hash = format!("{:x}", hasher.finalize());
+    std::env::temp_dir().join(format!("amcli-current-artwork-{}.img", hash))
+}
+
+fn escape_applescript_string(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 #[async_trait]
@@ -261,7 +316,7 @@ impl MediaPlayer for AppleMusicController {
     }
 
     async fn get_artwork_url(&self, track: &Track) -> Result<Option<String>> {
-        let track_key = format!("{}|{}", track.artist, track.name);
+        let track_key = format!("{}|{}|{}", track.artist, track.album, track.name);
 
         // Check LRU cache first (recover from poison — cache data is not critical)
         {
@@ -269,6 +324,16 @@ impl MediaPlayer for AppleMusicController {
             if let Some(url) = cache.get(&track_key) {
                 return Ok(url.clone());
             }
+        }
+
+        match self.export_current_track_artwork(track).await {
+            Ok(Some(url)) => {
+                let mut cache = self.artwork_cache.lock().unwrap_or_else(|e| e.into_inner());
+                cache.put(track_key, Some(url.clone()));
+                return Ok(Some(url));
+            }
+            Ok(None) => {}
+            Err(e) => tracing::debug!("Current track artwork export failed: {}", e),
         }
 
         let query = format!("{} {}", track.artist, track.name);
@@ -286,9 +351,10 @@ impl MediaPlayer for AppleMusicController {
             .as_str()
             .map(|s| s.replace("100x100bb", "600x600bb"));
 
-        // Update LRU cache (recover from poison — cache data is not critical)
-        let mut cache = self.artwork_cache.lock().unwrap_or_else(|e| e.into_inner());
-        cache.put(track_key, artwork_url.clone());
+        if let Some(url) = artwork_url.clone() {
+            let mut cache = self.artwork_cache.lock().unwrap_or_else(|e| e.into_inner());
+            cache.put(track_key, Some(url));
+        }
 
         Ok(artwork_url)
     }
@@ -351,5 +417,33 @@ mod tests {
         assert_eq!(track.artist, "Artist Name");
         assert_eq!(track.duration.as_secs(), 180);
         assert_eq!(track.position.as_secs(), 90);
+    }
+
+    #[tokio::test]
+    async fn get_artwork_url_prefers_current_track_artwork_export() {
+        let mut mock = MockCommandRunner::new();
+        mock.expect_execute()
+            .with(mockall::predicate::function(|script: &str| {
+                script.contains("artworks of current track")
+                    && script.contains("data of artwork 1 of current track")
+            }))
+            .times(1)
+            .returning(|_| Ok(mock_output("/tmp/amcli-current-artwork.img", true)));
+
+        let controller = AppleMusicController::with_runner(Box::new(mock));
+        let track = Track {
+            name: "Song Name".into(),
+            artist: "Artist Name".into(),
+            album: "Album Name".into(),
+            duration: Duration::from_secs(180),
+            position: Duration::from_secs(90),
+        };
+
+        let artwork_url = controller.get_artwork_url(&track).await.unwrap();
+
+        assert_eq!(
+            artwork_url.as_deref(),
+            Some("file:///tmp/amcli-current-artwork.img")
+        );
     }
 }

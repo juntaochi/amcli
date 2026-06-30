@@ -4,7 +4,7 @@ pub mod converter;
 use anyhow::Result;
 use image::{DynamicImage, Rgba, RgbaImage};
 use ratatui::style::Color;
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 const PIXELATION_BLOCK_SIZE: u32 = 8;
 
@@ -38,8 +38,7 @@ impl ArtworkManager {
             return Ok(img);
         }
 
-        let response = reqwest::get(url).await?.bytes().await?;
-        let img = image::load_from_memory(&response)?;
+        let img = load_artwork_image(url).await?;
 
         // Apply duotone theme only for retro themes
         let processed_img = if is_retro {
@@ -58,6 +57,22 @@ impl ArtworkManager {
         self.cache.insert(themed_url, themed_img.clone());
         Ok(themed_img)
     }
+}
+
+async fn load_artwork_image(source: &str) -> Result<DynamicImage> {
+    let bytes = if let Some(path) = source.strip_prefix("file://") {
+        tokio::fs::read(path).await?
+    } else {
+        let timeout = Duration::from_secs(5);
+        let response = tokio::time::timeout(timeout, reqwest::get(source))
+            .await??
+            .error_for_status()?;
+        tokio::time::timeout(timeout, response.bytes())
+            .await??
+            .to_vec()
+    };
+
+    Ok(image::load_from_memory(&bytes)?)
 }
 
 fn apply_pixelation(img: DynamicImage) -> DynamicImage {
@@ -235,6 +250,7 @@ fn lerp(a: f32, b: f32, t: f32) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn album_sized_images_use_the_original_mosaic_block_size() {
@@ -293,5 +309,23 @@ mod tests {
 
         assert_eq!(pixelated.width(), 97);
         assert_eq!(pixelated.height(), 53);
+    }
+
+    #[tokio::test]
+    async fn loads_local_file_artwork_sources() {
+        let path = std::env::temp_dir().join("amcli-local-artwork-source-test.png");
+        let img = DynamicImage::ImageRgba8(RgbaImage::from_pixel(2, 3, Rgba([1, 2, 3, 255])));
+        let mut bytes = Cursor::new(Vec::new());
+        img.write_to(&mut bytes, image::ImageFormat::Png).unwrap();
+        tokio::fs::write(&path, bytes.into_inner()).await.unwrap();
+
+        let loaded = load_artwork_image(&format!("file://{}", path.display()))
+            .await
+            .unwrap();
+
+        assert_eq!(loaded.width(), 2);
+        assert_eq!(loaded.height(), 3);
+
+        tokio::fs::remove_file(path).await.ok();
     }
 }
