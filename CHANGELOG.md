@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-06-30
+
+### Added
+- **Terminal title now playing** — Update the terminal window/tab title to `AMCLI: <track name>` as the active song changes.
+- **Release asset backfill workflow** — Add a manual workflow for uploading missing macOS release artifacts to existing tags.
+
+### Fixed
+- **Netease lyrics matching** — Search with title, album, and artist context, preserve Netease result rank, and weight close duration matches so localized catalog results are selected without hardcoded alias tables.
+- **Lyrics retry recovery** — Cache only successful lyric lookups so a temporary empty result does not prevent later attempts from loading lyrics for the same track.
+- **Artwork retry recovery** — Clear failed artwork URLs so transient image load failures can retry on later updates.
+
+### Changed
+- **Footer affordance** — Show the theme-switch shortcut in the footer controls.
+- **Lyrics and artwork README coverage** — Document LRCLIB/Netease matching, version-aware lyric caching, current-track artwork preference, and artwork retry behavior.
+
 ## [0.2.1] - 2026-06-29
 
 ### Fixed

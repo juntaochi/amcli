@@ -51,7 +51,7 @@ impl Lyrics {
 #[derive(Clone)]
 pub struct LyricsManager {
     providers: Vec<std::sync::Arc<dyn provider::LyricsProvider>>,
-    cache: std::sync::Arc<Mutex<LruCache<String, Option<Lyrics>>>>,
+    cache: std::sync::Arc<Mutex<LruCache<String, Lyrics>>>,
 }
 
 impl LyricsManager {
@@ -75,7 +75,7 @@ impl LyricsManager {
         if let Ok(mut cache) = self.cache.lock() {
             if let Some(cached) = cache.get(&cache_key) {
                 tracing::debug!("Lyrics cache hit for: {} - {}", track.name, track.artist);
-                return Ok(cached.clone());
+                return Ok(Some(cached.clone()));
             }
         }
 
@@ -94,7 +94,7 @@ impl LyricsManager {
                 Ok(Ok(Some(lyrics))) if !lyrics.lines.is_empty() => {
                     tracing::debug!("Lyrics found via provider: {}", provider.name());
                     if let Ok(mut cache) = self.cache.lock() {
-                        cache.put(cache_key, Some(lyrics.clone()));
+                        cache.put(cache_key, lyrics.clone());
                     }
                     return Ok(Some(lyrics));
                 }
@@ -114,9 +114,6 @@ impl LyricsManager {
         }
 
         tracing::debug!("No lyrics found for: {} - {}", track.name, track.artist);
-        if let Ok(mut cache) = self.cache.lock() {
-            cache.put(cache_key, None);
-        }
         Ok(None)
     }
 }
@@ -126,6 +123,7 @@ mod tests {
     use super::*;
     use crate::lyrics::provider::LyricsProvider;
     use async_trait::async_trait;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct AlbumEchoProvider;
 
@@ -148,6 +146,36 @@ mod tests {
 
         fn name(&self) -> &'static str {
             "album-echo"
+        }
+    }
+
+    struct RecoveringProvider {
+        calls: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl LyricsProvider for RecoveringProvider {
+        async fn get_lyrics(&self, track: &Track) -> Result<Option<Lyrics>> {
+            if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                return Ok(None);
+            }
+
+            Ok(Some(Lyrics {
+                lines: vec![LyricLine {
+                    text: track.name.clone(),
+                    timestamp: Duration::ZERO,
+                }],
+                metadata: HashMap::new(),
+                offset: 0,
+            }))
+        }
+
+        fn priority(&self) -> u8 {
+            1
+        }
+
+        fn name(&self) -> &'static str {
+            "recovering"
         }
     }
 
@@ -179,5 +207,27 @@ mod tests {
 
         assert_eq!(first.lines[0].text, "Studio Album");
         assert_eq!(second.lines[0].text, "Live Album");
+    }
+
+    #[tokio::test]
+    async fn does_not_cache_empty_lookup_so_later_attempt_can_recover() {
+        let mut manager = LyricsManager::new(4);
+        manager.add_provider(Box::new(RecoveringProvider {
+            calls: AtomicUsize::new(0),
+        }));
+
+        assert!(manager
+            .get_lyrics(&track("Studio Album", 240))
+            .await
+            .unwrap()
+            .is_none());
+
+        let recovered = manager
+            .get_lyrics(&track("Studio Album", 240))
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(recovered.lines[0].text, "Same Song");
     }
 }
