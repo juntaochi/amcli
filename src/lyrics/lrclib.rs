@@ -11,6 +11,8 @@ use reqwest::Client;
 use serde_json::Value;
 use std::time::Duration;
 
+const LRCLIB_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
 pub struct LrclibProvider {
     client: Client,
 }
@@ -19,7 +21,7 @@ impl LrclibProvider {
     pub fn new() -> Self {
         Self {
             client: Client::builder()
-                .timeout(Duration::from_secs(5))
+                .timeout(LRCLIB_REQUEST_TIMEOUT)
                 .build()
                 .unwrap_or_default(),
         }
@@ -58,14 +60,6 @@ impl LrclibProvider {
         Ok(None)
     }
 
-    fn extract_lyrics_for_track(json: &Value, track: &Track) -> Result<Option<Lyrics>> {
-        if Self::record_match_score(json, track).is_none() {
-            return Ok(None);
-        }
-
-        Self::extract_lyrics(json)
-    }
-
     fn select_best_record<'a>(records: &'a [Value], track: &Track) -> Option<&'a Value> {
         records
             .iter()
@@ -100,6 +94,14 @@ impl LrclibProvider {
                 .map(|lyrics| !lyrics.trim().is_empty())
                 .unwrap_or(false)
     }
+
+    fn search_url(track: &Track) -> String {
+        format!(
+            "https://lrclib.net/api/search?artist_name={}&track_name={}",
+            urlencoding::encode(&track.artist),
+            urlencoding::encode(&track.name)
+        )
+    }
 }
 
 fn string_field<'a>(json: &'a Value, field: &str) -> Option<&'a str> {
@@ -120,46 +122,12 @@ fn duration_seconds_field(json: &Value, field: &str) -> Option<Duration> {
 #[async_trait]
 impl LyricsProvider for LrclibProvider {
     async fn get_lyrics(&self, track: &Track) -> Result<Option<Lyrics>> {
-        // Stage 1: Try precise match with album and duration
-        let url_precise = format!(
-            "https://lrclib.net/api/get?artist_name={}&track_name={}&album_name={}&duration={}",
-            urlencoding::encode(&track.artist),
-            urlencoding::encode(&track.name),
-            urlencoding::encode(&track.album),
-            track.duration.as_secs()
-        );
-
         tracing::debug!(
-            "LRCLIB: Trying precise match for '{} - {}'",
+            "LRCLIB: Searching candidates for '{} - {}'",
             track.artist,
             track.name
         );
-
-        let precise_result = self
-            .client
-            .get(&url_precise)
-            .headers(Self::headers())
-            .send()
-            .await;
-
-        if let Ok(resp) = precise_result {
-            if resp.status().is_success() {
-                if let Ok(json) = resp.json::<Value>().await {
-                    if let Some(lyrics) = Self::extract_lyrics_for_track(&json, track)? {
-                        tracing::info!("LRCLIB: Found lyrics via precise match");
-                        return Ok(Some(lyrics));
-                    }
-                }
-            }
-        }
-
-        // Stage 2: Search candidates and choose the best local match.
-        tracing::debug!("LRCLIB: Precise match failed, searching candidates");
-        let url_search = format!(
-            "https://lrclib.net/api/search?artist_name={}&track_name={}",
-            urlencoding::encode(&track.artist),
-            urlencoding::encode(&track.name)
-        );
+        let url_search = Self::search_url(track);
 
         let search_result = self
             .client
@@ -192,7 +160,7 @@ impl LyricsProvider for LrclibProvider {
     }
 
     fn priority(&self) -> u8 {
-        5
+        10
     }
 
     fn name(&self) -> &'static str {
@@ -267,8 +235,17 @@ mod tests {
             "syncedLyrics": "[00:01.00]wrong version"
         });
 
-        let lyrics = LrclibProvider::extract_lyrics_for_track(&record, &track()).unwrap();
+        assert!(LrclibProvider::record_match_score(&record, &track()).is_none());
+    }
 
-        assert!(lyrics.is_none());
+    #[test]
+    fn search_url_uses_artist_and_title_only() {
+        let url = LrclibProvider::search_url(&track());
+
+        assert!(url.starts_with("https://lrclib.net/api/search?"));
+        assert!(url.contains("artist_name=Same%20Artist"));
+        assert!(url.contains("track_name=Same%20Song"));
+        assert!(!url.contains("album_name="));
+        assert!(!url.contains("duration="));
     }
 }

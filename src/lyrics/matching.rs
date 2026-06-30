@@ -88,8 +88,8 @@ fn normalized_eq(left: &str, right: &str) -> bool {
         return true;
     }
 
-    let left_base = normalize_text(strip_trailing_qualifiers(left));
-    let right_base = normalize_text(strip_trailing_qualifiers(right));
+    let left_base = normalize_text(strip_release_type_suffix(strip_trailing_qualifiers(left)));
+    let right_base = normalize_text(strip_release_type_suffix(strip_trailing_qualifiers(right)));
     !left_base.is_empty() && left_base == right_base
 }
 
@@ -126,6 +126,22 @@ fn strip_one_trailing_qualifier(value: &str) -> Option<&str> {
     }
 
     None
+}
+
+fn strip_release_type_suffix(value: &str) -> &str {
+    let trimmed = value.trim();
+    let lower = trimmed.to_lowercase();
+    for suffix in [" - ep", " - single", " ep", " single"] {
+        if !lower.ends_with(suffix) {
+            continue;
+        }
+        let prefix = &trimmed[..trimmed.len() - suffix.len()];
+        if !prefix.trim().is_empty() {
+            return prefix.trim_end();
+        }
+    }
+
+    trimmed
 }
 
 fn artist_matches(track_artist: &str, candidate_artists: &[&str]) -> bool {
@@ -356,6 +372,26 @@ mod tests {
             artist_names: &artist_names,
             album_name: Some("[i]"),
             duration: Some(Duration::from_millis(198_333)),
+        };
+
+        assert!(remote_lyrics_match_score(&target, &candidate).is_some());
+    }
+
+    #[test]
+    fn accepts_album_with_trailing_release_type_when_duration_matches() {
+        let target = Track {
+            name: "Roll-Cigg".into(),
+            artist: "Amazing Show".into(),
+            album: "Sound Check - EP".into(),
+            duration: Duration::from_millis(232_705),
+            position: Duration::ZERO,
+        };
+        let artist_names = ["美秀集团"];
+        let candidate = RemoteLyricsCandidate {
+            track_name: Some("卷烟"),
+            artist_names: &artist_names,
+            album_name: Some("Sound Check"),
+            duration: Some(Duration::from_millis(232_705)),
         };
 
         assert!(remote_lyrics_match_score(&target, &candidate).is_some());
