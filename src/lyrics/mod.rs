@@ -1,5 +1,5 @@
 use crate::player::Track;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use futures::StreamExt;
 use lru::LruCache;
 use std::collections::HashMap;
@@ -100,20 +100,31 @@ impl LyricsManager {
 
         // Once a provider has won a race it becomes the session primary: a single
         // request in the common case. Until then, race every provider concurrently.
-        let lyrics = match self.calibrated_primary() {
+        let result = match self.calibrated_primary() {
             Some(primary) => self.fetch_sequential(track, primary).await,
             None => self.fetch_race(track).await,
         };
 
-        if let Some(ref lyrics) = lyrics {
-            if let Ok(mut cache) = self.cache.lock() {
-                cache.put(cache_key, lyrics.clone());
+        match &result {
+            Ok(Some(lyrics)) => {
+                if let Ok(mut cache) = self.cache.lock() {
+                    cache.put(cache_key, lyrics.clone());
+                }
             }
-        } else {
-            tracing::debug!("No lyrics found for: {} - {}", track.name, track.artist);
+            Ok(None) => {
+                tracing::debug!("No lyrics found for: {} - {}", track.name, track.artist);
+            }
+            Err(e) => {
+                tracing::debug!(
+                    "Lyrics providers unreachable for {} - {}: {}",
+                    track.name,
+                    track.artist,
+                    e
+                );
+            }
         }
 
-        Ok(lyrics)
+        result
     }
 
     fn calibrated_primary(&self) -> Option<usize> {
@@ -129,17 +140,23 @@ impl LyricsManager {
     }
 
     // Calibrated path: try the primary first, then the rest as fallback.
-    async fn fetch_sequential(&self, track: &Track, primary: usize) -> Option<Lyrics> {
+    async fn fetch_sequential(&self, track: &Track, primary: usize) -> Result<Option<Lyrics>> {
         let mut order = vec![primary];
         order.extend(self.priority_order().into_iter().filter(|&i| i != primary));
 
+        let mut saw_miss = false;
+        let mut saw_fail = false;
         for idx in order {
-            if let Probe::Hit(lyrics) = probe_provider(self.providers[idx].clone(), track).await {
-                tracing::debug!("Lyrics found via provider: {}", self.providers[idx].name());
-                return Some(lyrics);
+            match probe_provider(self.providers[idx].clone(), track).await {
+                Probe::Hit(lyrics) => {
+                    tracing::debug!("Lyrics found via provider: {}", self.providers[idx].name());
+                    return Ok(Some(lyrics));
+                }
+                Probe::Miss => saw_miss = true,
+                Probe::Fail => saw_fail = true,
             }
         }
-        None
+        unreachable_or_empty(saw_fail, saw_miss)
     }
 
     // Uncalibrated path: query every provider concurrently and return the first one
@@ -150,7 +167,7 @@ impl LyricsManager {
     // there the latency signal is ambiguous, so leave calibration open and re-race
     // next track. A rival that failed or timed out before the hit is a reachability
     // win and locks immediately.
-    async fn fetch_race(&self, track: &Track) -> Option<Lyrics> {
+    async fn fetch_race(&self, track: &Track) -> Result<Option<Lyrics>> {
         let mut probes: futures::stream::FuturesUnordered<_> = self
             .priority_order()
             .into_iter()
@@ -161,12 +178,14 @@ impl LyricsManager {
             .collect();
 
         let mut saw_fail = false;
-        let mut healthy_miss_before_hit = false;
+        let mut saw_miss = false;
 
         while let Some((idx, outcome)) = probes.next().await {
             match outcome {
                 Probe::Hit(lyrics) => {
-                    if saw_fail || !healthy_miss_before_hit {
+                    // `saw_miss` here means a healthy rival answered (empty) before
+                    // this hit — the ambiguous "cold song" case — so we don't lock.
+                    if saw_fail || !saw_miss {
                         if let Ok(mut primary) = self.primary.lock() {
                             *primary = Some(idx);
                         }
@@ -175,14 +194,25 @@ impl LyricsManager {
                             self.providers[idx].name()
                         );
                     }
-                    return Some(lyrics);
+                    return Ok(Some(lyrics));
                 }
-                Probe::Miss => healthy_miss_before_hit = true,
+                Probe::Miss => saw_miss = true,
                 Probe::Fail => saw_fail = true,
             }
         }
 
-        None
+        unreachable_or_empty(saw_fail, saw_miss)
+    }
+}
+
+// No provider produced lyrics. If every provider that responded failed (none merely
+// reported "no match"), the sources are unreachable — surface that as an error so the
+// caller can distinguish "no signal" from "no lyrics". Otherwise it is a genuine miss.
+fn unreachable_or_empty(saw_fail: bool, saw_miss: bool) -> Result<Option<Lyrics>> {
+    if saw_fail && !saw_miss {
+        Err(anyhow!("all lyrics providers were unreachable"))
+    } else {
+        Ok(None)
     }
 }
 
@@ -505,5 +535,27 @@ mod tests {
         assert_eq!(second.lines[0].text, "up");
         assert_eq!(down_calls.load(Ordering::SeqCst), 1);
         assert_eq!(up_calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn all_providers_unreachable_surface_as_error() {
+        let (down, _) = probe_provider_for("down", 5, 0, TestOutcome::Fail);
+        let mut manager = LyricsManager::new(4);
+        manager.add_provider(down);
+
+        // Every provider failed (none merely reported "no match") → error, not Ok(None).
+        assert!(manager.get_lyrics(&track("A", 1)).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn unreachable_provider_with_a_healthy_miss_is_not_an_error() {
+        let (down, _) = probe_provider_for("down", 5, 0, TestOutcome::Fail);
+        let (miss, _) = probe_provider_for("miss", 10, 0, TestOutcome::Miss);
+        let mut manager = LyricsManager::new(4);
+        manager.add_provider(down);
+        manager.add_provider(miss);
+
+        // One source is down, but a reachable source simply had no match → Ok(None).
+        assert!(manager.get_lyrics(&track("A", 1)).await.unwrap().is_none());
     }
 }

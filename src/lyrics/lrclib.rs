@@ -4,7 +4,7 @@ use crate::lyrics::parser::parse_lrc;
 use crate::lyrics::provider::LyricsProvider;
 use crate::lyrics::Lyrics;
 use crate::player::Track;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 use reqwest::Client;
@@ -127,35 +127,36 @@ impl LyricsProvider for LrclibProvider {
             track.artist,
             track.name
         );
-        let url_search = Self::search_url(track);
-
-        let search_result = self
+        // A network/HTTP/decode failure is reported as an error so the caller can
+        // tell "unreachable" apart from "reachable but no match". Only a successful
+        // search that genuinely finds nothing returns Ok(None).
+        let response = self
             .client
-            .get(&url_search)
+            .get(Self::search_url(track))
             .headers(Self::headers())
             .send()
-            .await;
+            .await
+            .map_err(|e| anyhow!("LRCLIB request failed: {e}"))?;
 
-        if let Ok(resp) = search_result {
-            if resp.status().is_success() {
-                if let Ok(json) = resp.json::<Value>().await {
-                    if let Some(records) = json.as_array() {
-                        if let Some(record) = Self::select_best_record(records, track) {
-                            if let Some(lyrics) = Self::extract_lyrics(record)? {
-                                tracing::info!("LRCLIB: Found lyrics via scored search match");
-                                return Ok(Some(lyrics));
-                            }
-                        }
-                    }
+        if !response.status().is_success() {
+            return Err(anyhow!("LRCLIB returned HTTP {}", response.status()));
+        }
+
+        let json = response
+            .json::<Value>()
+            .await
+            .map_err(|e| anyhow!("LRCLIB response was not valid JSON: {e}"))?;
+
+        if let Some(records) = json.as_array() {
+            if let Some(record) = Self::select_best_record(records, track) {
+                if let Some(lyrics) = Self::extract_lyrics(record)? {
+                    tracing::info!("LRCLIB: Found lyrics via scored search match");
+                    return Ok(Some(lyrics));
                 }
             }
         }
 
-        tracing::debug!(
-            "LRCLIB: No lyrics found for '{} - {}'",
-            track.artist,
-            track.name
-        );
+        tracing::debug!("LRCLIB: No match for '{} - {}'", track.artist, track.name);
         Ok(None)
     }
 

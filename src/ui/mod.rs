@@ -164,6 +164,9 @@ pub struct App {
     animation_frame: u32,
     lyrics_manager: Arc<LyricsManager>,
     current_lyrics: Option<Lyrics>,
+    // True when the last lyrics fetch failed because the providers were unreachable,
+    // as opposed to reachable-but-no-match. Drives "NO SIGNAL" vs "NO LYRICS".
+    lyrics_unreachable: bool,
     lyrics_task: Option<JoinHandle<Result<Option<Lyrics>>>>,
     config: crate::config::Config,
     settings_menu: SettingsMenu,
@@ -239,6 +242,7 @@ impl App {
             animation_frame: 0,
             lyrics_manager,
             current_lyrics: None,
+            lyrics_unreachable: false,
             lyrics_task: None,
             config,
             settings_menu,
@@ -477,6 +481,7 @@ impl App {
 
         if track_changed {
             self.current_lyrics = None;
+            self.lyrics_unreachable = false;
             if let Some(task) = self.lyrics_task.take() {
                 task.abort();
             }
@@ -494,9 +499,15 @@ impl App {
             if task.is_finished() {
                 if let Some(task) = self.lyrics_task.take() {
                     match task.await {
-                        Ok(Ok(Some(lyrics))) => self.current_lyrics = Some(lyrics),
-                        Ok(Ok(None)) => {}
-                        Ok(Err(e)) => tracing::debug!("Lyrics fetch failed: {}", e),
+                        Ok(Ok(Some(lyrics))) => {
+                            self.current_lyrics = Some(lyrics);
+                            self.lyrics_unreachable = false;
+                        }
+                        Ok(Ok(None)) => self.lyrics_unreachable = false,
+                        Ok(Err(e)) => {
+                            tracing::debug!("Lyrics fetch failed: {}", e);
+                            self.lyrics_unreachable = true;
+                        }
                         Err(e) => tracing::warn!("Lyrics task panicked: {}", e),
                     }
                 }
@@ -612,11 +623,30 @@ impl App {
     }
 }
 
-fn draw_lyrics(f: &mut Frame, area: Rect, track: &Track, lyrics: Option<&Lyrics>, theme: Theme) {
+fn draw_lyrics(
+    f: &mut Frame,
+    area: Rect,
+    track: &Track,
+    lyrics: Option<&Lyrics>,
+    unreachable: bool,
+    theme: Theme,
+    is_jp: bool,
+) {
     let lyrics: &Lyrics = match lyrics {
         Some(l) => l,
         None => {
-            let p = Paragraph::new("NO LYRICS AVAILABLE")
+            let message = if unreachable {
+                if is_jp {
+                    "信号なし"
+                } else {
+                    "NO SIGNAL"
+                }
+            } else if is_jp {
+                "歌詞なし"
+            } else {
+                "NO LYRICS AVAILABLE"
+            };
+            let p = Paragraph::new(message)
                 .style(Style::default().fg(theme.dim).add_modifier(Modifier::DIM))
                 .alignment(Alignment::Center);
             let v_center = Layout::default()
@@ -1124,7 +1154,15 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
     if lyrics_area.height > 2 {
         if let Some(track) = app.current_track.as_ref() {
-            draw_lyrics(f, lyrics_area, track, app.current_lyrics.as_ref(), theme);
+            draw_lyrics(
+                f,
+                lyrics_area,
+                track,
+                app.current_lyrics.as_ref(),
+                app.lyrics_unreachable,
+                theme,
+                is_jp,
+            );
         }
     }
     if let Some(tuner_area) = tuner_area {
