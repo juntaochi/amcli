@@ -47,7 +47,9 @@
 
 #### 🎨 视觉体验
 - ASCII/Unicode/真彩色专辑封面
+- **当前曲目封面优先**：优先使用 Music.app 正在播放项目的封面，在线搜索作为备选
 - **非阻塞后台加载**：封面下载与处理不再引起 UI 冻结
+- **失败自动重试**：临时加载失败不会阻止后续重新获取封面
 - **6 种主题可选**：
   - `AMBER VFD` (默认橙色复古风)
   - `GREEN VFD` (绿色终端风格)
@@ -63,8 +65,9 @@
 - **实时同步显示**：毫秒级精度的 LRC 歌词同步
 - **多源智能获取**：
   - 本地优先：自动搜索 `~/Music/Lyrics` 下的 `.lrc` 文件
-  - 在线备选：网易云音乐 API 自动搜索匹配
-  - LRU 缓存：加速重复查询
+  - 在线备选：LRCLIB 与网易云音乐 API 自动搜索匹配
+  - 候选校验：按歌名、歌手、专辑与时长筛选，支持平台间艺名本地化差异
+  - LRU 缓存：按歌曲版本加速重复查询
 - **自动滚动视图**：当前歌词行始终居中高亮
 - **完整 LRC 解析**：支持多时间戳、偏移量调整
 
@@ -233,7 +236,9 @@ show_help_on_start = true
 
 #### 🎨 Visual Experience
 - ASCII/Unicode/TrueColor album artwork
+- **Current-track artwork first**: Prefer artwork exported from the active Music.app track, with online search as fallback
 - **Non-blocking background loading**: Artwork downloading and processing no longer freezes the UI
+- **Automatic retry after failures**: Transient artwork load failures do not block later reload attempts
 - **6 Themes Available**:
   - `AMBER VFD` (Default orange retro style)
   - `GREEN VFD` (Green terminal aesthetic)
@@ -249,8 +254,9 @@ show_help_on_start = true
 - **Real-time Synchronization**: Millisecond-precision LRC lyrics sync
 - **Multi-source Smart Fetching**:
   - Local Priority: Auto-search `~/Music/Lyrics` for `.lrc` files
-  - Online Fallback: Netease Cloud Music API auto-matching
-  - LRU Caching: Accelerated repeated queries
+  - Online Fallback: LRCLIB and Netease Cloud Music API auto-matching
+  - Candidate Validation: Filters by title, artist, album, and duration while allowing localized artist aliases across platforms
+  - LRU Caching: Version-aware accelerated repeated queries
 - **Auto-scrolling View**: Current lyric line always centered and highlighted
 - **Full LRC Parsing**: Supports multiple timestamps and offset adjustments
 

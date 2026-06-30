@@ -9,6 +9,11 @@ use reqwest::Client;
 use serde_json::Value;
 use std::time::Duration;
 
+const SEARCH_RANK_BONUS: u16 = 120;
+const SEARCH_RANK_DECAY: u16 = 6;
+const DURATION_MATCH_BONUS: u16 = 200;
+const DURATION_TOLERANCE: Duration = Duration::from_secs(3);
+
 pub struct NeteaseProvider {
     client: Client,
 }
@@ -28,12 +33,52 @@ impl NeteaseProvider {
         json["result"]["songs"]
             .as_array()?
             .iter()
-            .filter_map(|song| {
+            .enumerate()
+            .filter_map(|(rank, song)| {
                 let id = song["id"].as_i64()?;
-                Self::song_match_score(song, track).map(|score| (score, id))
+                Self::ranked_song_match_score(song, track, rank).map(|score| (score, rank, id))
             })
-            .max_by_key(|(score, _)| *score)
-            .map(|(_, id)| id)
+            .max_by(|(left_score, left_rank, _), (right_score, right_rank, _)| {
+                left_score
+                    .cmp(right_score)
+                    .then_with(|| right_rank.cmp(left_rank))
+            })
+            .map(|(_, _, id)| id)
+    }
+
+    #[cfg(test)]
+    fn select_song_id_from_results(results: &[Value], track: &Track) -> Option<i64> {
+        results
+            .iter()
+            .find_map(|json| Self::select_song_id(json, track))
+    }
+
+    fn search_queries(track: &Track) -> Vec<String> {
+        let mut queries = Vec::new();
+        Self::push_search_query(&mut queries, &[&track.name, &track.album, &track.artist]);
+        Self::push_search_query(&mut queries, &[&track.name, &track.artist]);
+        Self::push_search_query(&mut queries, &[&track.name]);
+        queries
+    }
+
+    fn push_search_query(queries: &mut Vec<String>, parts: &[&str]) {
+        let query = parts
+            .iter()
+            .map(|part| part.trim())
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        if !query.is_empty() && !queries.iter().any(|existing| existing == &query) {
+            queries.push(query);
+        }
+    }
+
+    fn search_url(query: &str) -> String {
+        format!(
+            "https://music.163.com/api/cloudsearch/pc?s={}&type=1&limit=20",
+            urlencoding::encode(query)
+        )
     }
 
     fn song_match_score(song: &Value, track: &Track) -> Option<u16> {
@@ -44,13 +89,43 @@ impl NeteaseProvider {
             album_name: song["al"]["name"]
                 .as_str()
                 .or_else(|| song["album"]["name"].as_str()),
-            duration: song["dt"]
-                .as_u64()
-                .or_else(|| song["duration"].as_u64())
-                .map(Duration::from_millis),
+            duration: Self::song_duration(song),
         };
 
         remote_lyrics_match_score(track, &candidate)
+    }
+
+    fn ranked_song_match_score(song: &Value, track: &Track, rank: usize) -> Option<u16> {
+        Some(
+            Self::song_match_score(song, track)?
+                + Self::search_rank_score(rank)
+                + Self::duration_score(song, track),
+        )
+    }
+
+    fn search_rank_score(rank: usize) -> u16 {
+        let rank = u16::try_from(rank).unwrap_or(u16::MAX);
+        SEARCH_RANK_BONUS.saturating_sub(rank.saturating_mul(SEARCH_RANK_DECAY))
+    }
+
+    fn duration_score(song: &Value, track: &Track) -> u16 {
+        let Some(duration) = Self::song_duration(song) else {
+            return 0;
+        };
+        let diff = track.duration.abs_diff(duration);
+        if diff > DURATION_TOLERANCE {
+            return 0;
+        }
+
+        let penalty = u16::try_from(diff.as_millis() / 100).unwrap_or(u16::MAX);
+        DURATION_MATCH_BONUS.saturating_sub(penalty)
+    }
+
+    fn song_duration(song: &Value) -> Option<Duration> {
+        song["dt"]
+            .as_u64()
+            .or_else(|| song["duration"].as_u64())
+            .map(Duration::from_millis)
     }
 
     fn artist_names(song: &Value) -> Vec<&str> {
@@ -71,17 +146,18 @@ impl NeteaseProvider {
 #[async_trait]
 impl LyricsProvider for NeteaseProvider {
     async fn get_lyrics(&self, track: &Track) -> Result<Option<Lyrics>> {
-        let query = format!("{} {}", track.name, track.artist);
+        let mut song_id = None;
+        for query in Self::search_queries(track) {
+            let response = self.client.get(Self::search_url(&query)).send().await?;
+            let json = response.json::<Value>().await?;
 
-        let search_url = format!(
-            "https://music.163.com/api/cloudsearch/pc?s={}&type=1&limit=10",
-            urlencoding::encode(&query)
-        );
+            if let Some(id) = Self::select_song_id(&json, track) {
+                song_id = Some(id);
+                break;
+            }
+        }
 
-        let response = self.client.get(&search_url).send().await?;
-        let json = response.json::<Value>().await?;
-
-        let song_id = match Self::select_song_id(&json, track) {
+        let song_id = match song_id {
             Some(id) => id,
             None => {
                 tracing::debug!("No confident Netease song match found");
@@ -117,90 +193,5 @@ impl LyricsProvider for NeteaseProvider {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn track() -> Track {
-        Track {
-            name: "Same Song".into(),
-            artist: "Same Artist".into(),
-            album: "Studio Album".into(),
-            duration: Duration::from_secs(240),
-            position: Duration::ZERO,
-        }
-    }
-
-    #[test]
-    fn selects_matching_netease_song_instead_of_first_search_result() {
-        let json = serde_json::json!({
-            "result": {
-                "songs": [
-                    {
-                        "id": 1,
-                        "name": "Same Song",
-                        "ar": [{"name": "Same Artist"}],
-                        "al": {"name": "Live Album"},
-                        "dt": 260000
-                    },
-                    {
-                        "id": 2,
-                        "name": "Same Song",
-                        "ar": [{"name": "Same Artist"}],
-                        "al": {"name": "Studio Album"},
-                        "dt": 240000
-                    }
-                ]
-            }
-        });
-
-        assert_eq!(NeteaseProvider::select_song_id(&json, &track()), Some(2));
-    }
-
-    #[test]
-    fn rejects_netease_song_with_same_title_artist_but_wrong_version() {
-        let json = serde_json::json!({
-            "result": {
-                "songs": [
-                    {
-                        "id": 1,
-                        "name": "Same Song",
-                        "ar": [{"name": "Same Artist"}],
-                        "al": {"name": "Live Album"},
-                        "dt": 260000
-                    }
-                ]
-            }
-        });
-
-        assert_eq!(NeteaseProvider::select_song_id(&json, &track()), None);
-    }
-
-    #[test]
-    fn selects_netease_song_with_localized_artist_when_album_and_duration_match() {
-        let target = Track {
-            name: "LIGHT IT UP!".into(),
-            artist: "YUZUHA".into(),
-            album: "Light It Up!".into(),
-            duration: Duration::from_millis(261_275),
-            position: Duration::ZERO,
-        };
-        let json = serde_json::json!({
-            "result": {
-                "songs": [
-                    {
-                        "id": 2703859971i64,
-                        "name": "Light It Up!",
-                        "ar": [{"name": "柚子花"}],
-                        "al": {"name": "Light It Up!"},
-                        "dt": 261275
-                    }
-                ]
-            }
-        });
-
-        assert_eq!(
-            NeteaseProvider::select_song_id(&json, &target),
-            Some(2703859971)
-        );
-    }
-}
+#[path = "netease_tests.rs"]
+mod tests;

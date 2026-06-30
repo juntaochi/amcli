@@ -25,9 +25,7 @@ pub(crate) fn remote_lyrics_match_score(
     candidate: &RemoteLyricsCandidate<'_>,
 ) -> Option<u16> {
     let candidate_title = candidate.track_name?;
-    if !normalized_eq(&track.name, candidate_title) {
-        return None;
-    }
+    let title_matches = normalized_eq(&track.name, candidate_title);
 
     let candidate_has_album = candidate
         .album_name
@@ -44,23 +42,34 @@ pub(crate) fn remote_lyrics_match_score(
     let has_disambiguator = candidate_has_album || candidate.duration.is_some();
     let artist_matches = artist_matches(&track.artist, candidate.artist_names);
 
-    if !(artist_matches || album_matches && duration_matches) {
+    if duration_matches && !(title_matches || artist_matches || album_matches) {
         return None;
     }
 
-    if artist_matches && has_disambiguator && !album_matches && !duration_matches {
+    if !duration_matches && !title_matches {
+        return None;
+    }
+
+    if !duration_matches && !artist_matches {
+        return None;
+    }
+
+    if !duration_matches && artist_matches && has_disambiguator && !album_matches {
         return None;
     }
 
     let mut score = 100;
+    if duration_matches {
+        score += 100;
+    }
+    if title_matches {
+        score += 50;
+    }
     if artist_matches {
-        score += 25;
+        score += 30;
     }
     if album_matches {
-        score += 25;
-    }
-    if duration_matches {
-        score += 25;
+        score += 20;
     }
     if !has_disambiguator {
         score -= 20;
@@ -70,8 +79,18 @@ pub(crate) fn remote_lyrics_match_score(
 }
 
 fn normalized_eq(left: &str, right: &str) -> bool {
-    let left = normalize_text(left);
-    !left.is_empty() && left == normalize_text(right)
+    let left_norm = normalize_text(left);
+    if left_norm.is_empty() {
+        return false;
+    }
+
+    if left_norm == normalize_text(right) {
+        return true;
+    }
+
+    let left_base = normalize_text(strip_trailing_qualifiers(left));
+    let right_base = normalize_text(strip_trailing_qualifiers(right));
+    !left_base.is_empty() && left_base == right_base
 }
 
 fn normalize_text(value: &str) -> String {
@@ -80,6 +99,33 @@ fn normalize_text(value: &str) -> String {
         .flat_map(|c| c.to_lowercase())
         .filter(|c| c.is_alphanumeric())
         .collect()
+}
+
+fn strip_trailing_qualifiers(value: &str) -> &str {
+    let mut trimmed = value.trim();
+    loop {
+        let Some(stripped) = strip_one_trailing_qualifier(trimmed) else {
+            return trimmed;
+        };
+        trimmed = stripped.trim_end();
+    }
+}
+
+fn strip_one_trailing_qualifier(value: &str) -> Option<&str> {
+    for (open, close) in [("(", ")"), ("（", "）"), ("[", "]"), ("【", "】")] {
+        if !value.ends_with(close) {
+            continue;
+        }
+
+        let open_index = value.rfind(open)?;
+        if open_index == 0 {
+            return None;
+        }
+
+        return Some(&value[..open_index]);
+    }
+
+    None
 }
 
 fn artist_matches(track_artist: &str, candidate_artists: &[&str]) -> bool {
@@ -233,5 +279,85 @@ mod tests {
         };
 
         assert_eq!(remote_lyrics_match_score(&target, &candidate), None);
+    }
+
+    #[test]
+    fn accepts_localized_artist_name_when_title_has_catalog_suffix_and_duration_matches() {
+        let target = Track {
+            name: "小情歌".into(),
+            artist: "SODAGREEN".into(),
+            album: "小宇宙".into(),
+            duration: Duration::from_millis(276_626),
+            position: Duration::ZERO,
+        };
+        let artist_names = ["苏打绿"];
+        let candidate = RemoteLyricsCandidate {
+            track_name: Some("小情歌 (苏打绿版)"),
+            artist_names: &artist_names,
+            album_name: Some("小宇宙 (苏打绿版)"),
+            duration: Some(Duration::from_millis(276_626)),
+        };
+
+        assert!(remote_lyrics_match_score(&target, &candidate).is_some());
+    }
+
+    #[test]
+    fn accepts_localized_artist_name_when_duration_matches_even_if_album_is_translated() {
+        let target = Track {
+            name: "小情歌".into(),
+            artist: "SODAGREEN".into(),
+            album: "Little Universe".into(),
+            duration: Duration::from_millis(276_626),
+            position: Duration::ZERO,
+        };
+        let artist_names = ["苏打绿"];
+        let candidate = RemoteLyricsCandidate {
+            track_name: Some("小情歌 (苏打绿版)"),
+            artist_names: &artist_names,
+            album_name: Some("小宇宙 (苏打绿版)"),
+            duration: Some(Duration::from_millis(276_626)),
+        };
+
+        assert!(remote_lyrics_match_score(&target, &candidate).is_some());
+    }
+
+    #[test]
+    fn rejects_suffix_title_match_with_localized_artist_when_duration_disagrees() {
+        let target = Track {
+            name: "小情歌".into(),
+            artist: "SODAGREEN".into(),
+            album: "小宇宙".into(),
+            duration: Duration::from_millis(276_626),
+            position: Duration::ZERO,
+        };
+        let artist_names = ["苏打绿"];
+        let candidate = RemoteLyricsCandidate {
+            track_name: Some("小情歌 (Live)"),
+            artist_names: &artist_names,
+            album_name: None,
+            duration: Some(Duration::from_millis(258_396)),
+        };
+
+        assert_eq!(remote_lyrics_match_score(&target, &candidate), None);
+    }
+
+    #[test]
+    fn accepts_traditional_title_with_localized_artist_when_duration_matches() {
+        let target = Track {
+            name: "愛".into(),
+            artist: "KAREN MOK".into(),
+            album: "[i]".into(),
+            duration: Duration::from_millis(198_333),
+            position: Duration::ZERO,
+        };
+        let artist_names = ["莫文蔚"];
+        let candidate = RemoteLyricsCandidate {
+            track_name: Some("爱"),
+            artist_names: &artist_names,
+            album_name: Some("[i]"),
+            duration: Some(Duration::from_millis(198_333)),
+        };
+
+        assert!(remote_lyrics_match_score(&target, &candidate).is_some());
     }
 }
