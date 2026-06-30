@@ -10,6 +10,16 @@ fn track() -> Track {
     }
 }
 
+fn localized_title_track() -> Track {
+    Track {
+        name: "Not Good Enough For You".into(),
+        artist: "Jay Chou".into(),
+        album: "Jay Chou On The Run".into(),
+        duration: Duration::from_millis(288_760),
+        position: Duration::ZERO,
+    }
+}
+
 #[test]
 fn selects_matching_netease_song_instead_of_first_search_result() {
     let json = serde_json::json!({
@@ -212,6 +222,54 @@ fn selects_match_from_later_title_only_search_results() {
 }
 
 #[test]
+fn prefers_clean_query_over_earlier_same_title_decoy_with_close_duration() {
+    let target = Track {
+        name: "Love me now (feat. zoe wees)".into(),
+        artist: "Kygo".into(),
+        album: "Thrill Of The Chase".into(),
+        duration: Duration::from_millis(196_100),
+        position: Duration::ZERO,
+    };
+    // Album-bearing query: real track absent, only a same-title song by a
+    // different artist whose duration coincidentally lands within tolerance.
+    let album_query_results = serde_json::json!({
+        "result": {
+            "songs": [
+                {
+                    "id": 1295064974i64,
+                    "name": "Love Me Now (feat. Se.A)",
+                    "ar": [{"name": "FIXL"}, {"name": "Rothchild"}, {"name": "Se.A"}],
+                    "al": {"name": "Love Me Now"},
+                    "dt": 198700
+                }
+            ]
+        }
+    });
+    // Cleaner name+artist query holds the correct track.
+    let artist_query_results = serde_json::json!({
+        "result": {
+            "songs": [
+                {
+                    "id": 1868378791i64,
+                    "name": "Love Me Now",
+                    "ar": [{"name": "Kygo"}, {"name": "Zoe Wees"}],
+                    "al": {"name": "Love Me Now"},
+                    "dt": 196100
+                }
+            ]
+        }
+    });
+
+    assert_eq!(
+        NeteaseProvider::select_song_id_from_results(
+            &[album_query_results, artist_query_results],
+            &target
+        ),
+        Some(1868378791)
+    );
+}
+
+#[test]
 fn selects_netease_song_with_traditional_title_and_english_artist() {
     let target = Track {
         name: "愛".into(),
@@ -245,4 +303,130 @@ fn selects_netease_song_with_traditional_title_and_english_artist() {
         NeteaseProvider::select_song_id(&json, &target),
         Some(277302)
     );
+}
+
+#[test]
+fn selects_artist_id_from_netease_alias() {
+    let artists = serde_json::json!({
+        "result": {
+            "artists": [
+                {
+                    "id": 6452,
+                    "name": "周杰伦",
+                    "alias": ["Jay Chou", "周董"]
+                }
+            ]
+        }
+    });
+
+    assert_eq!(
+        NeteaseProvider::select_artist_id(&artists, &localized_title_track()),
+        Some(6452)
+    );
+}
+
+#[test]
+fn selects_song_from_album_alias_by_duration_for_localized_titles() {
+    let albums = serde_json::json!({
+        "hotAlbums": [
+            {
+                "id": 18886,
+                "name": "我很忙",
+                "artist": {
+                    "name": "周杰伦",
+                    "alias": ["Jay Chou"]
+                },
+                "alias": ["On The Run!"],
+                "size": 10
+            }
+        ]
+    });
+    let album = serde_json::json!({
+        "songs": [
+            {
+                "id": 185807,
+                "name": "牛仔很忙",
+                "al": {"name": "我很忙"},
+                "dt": 168000
+            },
+            {
+                "id": 185818,
+                "name": "我不配",
+                "al": {"name": "我很忙"},
+                "dt": 288000
+            }
+        ]
+    });
+
+    assert_eq!(
+        NeteaseProvider::select_album_alias_song_id(&albums, &[album], &localized_title_track()),
+        Some(185818)
+    );
+}
+
+#[test]
+fn rejects_album_song_when_duration_is_outside_tolerance() {
+    let album = serde_json::json!({
+        "songs": [
+            {
+                "id": 185818,
+                "name": "我不配",
+                "al": {"name": "我很忙"},
+                "dt": 281000
+            }
+        ]
+    });
+
+    assert_eq!(
+        NeteaseProvider::select_song_id_by_album_duration(&album, &localized_title_track()),
+        None
+    );
+}
+
+#[test]
+fn alias_lookup_urls_do_not_use_song_search() {
+    assert_eq!(
+        NeteaseProvider::artist_search_url("Jay Chou"),
+        "https://music.163.com/api/cloudsearch/pc?s=Jay%20Chou&type=100&limit=5"
+    );
+    assert_eq!(
+        NeteaseProvider::artist_albums_url(6452),
+        "https://music.163.com/api/artist/albums/6452?id=6452&offset=0&limit=50"
+    );
+    assert_eq!(
+        NeteaseProvider::album_url(18886),
+        "https://music.163.com/api/v1/album/18886"
+    );
+}
+
+#[test]
+fn strips_leading_colon_lines_from_netease_lyrics() {
+    let lrc = "\
+[00:00.00] 作词 : 方文山
+[00:01.00] 统筹：某人
+[00:02.00] Lyrics : Someone
+[00:03.00] Publisher：Someone
+[00:18.63]这街上太拥挤
+[00:20.86]太多人有秘密
+[00:30.00]作词：这句已经是正文";
+
+    let lyrics = NeteaseProvider::parse_lyrics(lrc).unwrap();
+
+    assert_eq!(lyrics.lines.len(), 3);
+    assert_eq!(lyrics.lines[0].text, "这街上太拥挤");
+    assert_eq!(lyrics.lines[1].text, "太多人有秘密");
+    assert_eq!(lyrics.lines[2].text, "作词：这句已经是正文");
+}
+
+#[test]
+fn ignores_timestamp_colons_when_stripping_netease_credits() {
+    let lrc = "\
+[00:18.63]这街上太拥挤
+[00:20.86]太多人有秘密";
+
+    let lyrics = NeteaseProvider::parse_lyrics(lrc).unwrap();
+
+    assert_eq!(lyrics.lines.len(), 2);
+    assert_eq!(lyrics.lines[0].text, "这街上太拥挤");
+    assert_eq!(lyrics.lines[1].text, "太多人有秘密");
 }
