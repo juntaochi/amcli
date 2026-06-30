@@ -15,10 +15,12 @@ mod artwork;
 mod config;
 mod lyrics;
 mod player;
+mod terminal_title;
 mod ui;
 
 use crate::ui::App;
 use clap::Parser;
+use terminal_title::TerminalTitle;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -72,6 +74,8 @@ where
 {
     let mut last_update = std::time::Instant::now();
     let update_interval = std::time::Duration::from_millis(500);
+    let mut terminal_title = TerminalTitle::new();
+    terminal_title.sync(app.get_current_track())?;
 
     loop {
         if app.take_needs_full_repaint() {
@@ -143,6 +147,7 @@ where
 
         if last_update.elapsed() >= update_interval {
             app.update().await?;
+            terminal_title.sync(app.get_current_track())?;
             last_update = std::time::Instant::now();
         }
     }
