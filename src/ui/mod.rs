@@ -523,22 +523,24 @@ impl App {
                 cache.artist = track.artist.to_uppercase();
                 cache.album = track.album.to_uppercase();
             }
-            let progress_percent = if track.duration.as_secs() > 0 {
+            let p_s = track.position.as_secs();
+            let d_s = track.duration.as_secs();
+
+            let progress_percent = if d_s > 0 {
                 ((track.position.as_secs_f64() / track.duration.as_secs_f64()) * 100.0) as u16
             } else {
                 0
             };
+
+            // Inline duration formatting to avoid intermediate String allocations
             cache.duration_str = format!(
-                "{} / {}",
-                format_duration(track.position),
-                format_duration(track.duration)
+                "{:02}:{:02} / {:02}:{:02}",
+                p_s / 60,
+                p_s % 60,
+                d_s / 60,
+                d_s % 60
             );
-            cache.gauge_label = format!(
-                " {}/{} | {:02}% ",
-                format_duration_seconds(track.position),
-                format_duration_seconds(track.duration),
-                progress_percent
-            );
+            cache.gauge_label = format!(" {}s/{}s | {:02}% ", p_s, d_s, progress_percent);
             cache.progress_percent = progress_percent;
             self.metadata_cache = Some(cache);
         } else {
@@ -791,9 +793,9 @@ fn draw_progress(f: &mut Frame, area: Rect, track: &Track, theme: Theme) {
     };
 
     let label = format!(
-        " {}/{} | {:02}% ",
-        format_duration_seconds(track.position),
-        format_duration_seconds(track.duration),
+        " {}s/{}s | {:02}% ",
+        track.position.as_secs(),
+        track.duration.as_secs(),
         progress_percent
     );
 
@@ -901,14 +903,19 @@ fn draw_metadata(
         vec!["TRACK TITLE", "ARTIST", "ALBUM REFERENCE"]
     };
 
+    let p_s = track.position.as_secs();
+    let d_s = track.duration.as_secs();
+
     let values = [
         track.name.to_uppercase(),
         track.artist.to_uppercase(),
         track.album.to_uppercase(),
         format!(
-            "{} / {}",
-            format_duration(track.position),
-            format_duration(track.duration)
+            "{:02}:{:02} / {:02}:{:02}",
+            p_s / 60,
+            p_s % 60,
+            d_s / 60,
+            d_s % 60
         ),
     ];
 
@@ -1178,18 +1185,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if app.settings_menu.is_open {
         app.settings_menu.render(f, theme);
     }
-}
-
-fn format_duration_seconds(duration: Duration) -> String {
-    let total_seconds = duration.as_secs();
-    format!("{}s", total_seconds)
-}
-
-fn format_duration(duration: Duration) -> String {
-    let total_seconds = duration.as_secs();
-    let minutes = total_seconds / 60;
-    let seconds = total_seconds % 60;
-    format!("{:02}:{:02}", minutes, seconds)
 }
 
 // Optimized: Uses iterator chaining/cycling to avoid intermediate Vec<char> and format! allocations.
