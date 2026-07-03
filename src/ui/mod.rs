@@ -1020,25 +1020,28 @@ fn draw_metadata(
 }
 
 fn draw_controls(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) {
-    let controls = if is_jp {
-        vec![
-            ("▶再生", "SPC"),
-            ("▶▶次", "]"),
-            ("◀◀前", "["),
-            ("音量＋", "+"),
-            ("音量－", "-"),
-            ("テーマ", "t"),
-            ("電源", "q"),
+    // ⚡ Bolt: Performance optimization
+    // Using static slices and pre-formatted literals instead of vec![] and format!()
+    // inside the render loop avoids ~15 heap allocations per tick.
+    let controls: &[(&str, &str)] = if is_jp {
+        &[
+            (" ▶再生", " [SPC] "),
+            (" ▶▶次", " []] "),
+            (" ◀◀前", " [[] "),
+            (" 音量＋", " [+] "),
+            (" 音量－", " [-] "),
+            (" テーマ", " [t] "),
+            (" 電源", " [q] "),
         ]
     } else {
-        vec![
-            ("PLAY", "SPC"),
-            ("SKIP", "]"),
-            ("PREV", "["),
-            ("VOL+", "+"),
-            ("VOL-", "-"),
-            ("THEME", "t"),
-            ("EXIT", "q"),
+        &[
+            (" PLAY", " [SPC] "),
+            (" SKIP", " []] "),
+            (" PREV", " [[] "),
+            (" VOL+", " [+] "),
+            (" VOL-", " [-] "),
+            (" THEME", " [t] "),
+            (" EXIT", " [q] "),
         ]
     };
 
@@ -1048,12 +1051,12 @@ fn draw_controls(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) {
         if i < btn_layout.len() {
             let btn_text = Line::from(vec![
                 Span::styled(
-                    format!(" {}", label),
+                    *label,
                     Style::default()
                         .fg(theme.primary)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(format!(" [{}] ", key), Style::default().fg(theme.dim)),
+                Span::styled(*key, Style::default().fg(theme.dim)),
             ]);
 
             let mut btn_block = Block::default()
