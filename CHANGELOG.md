@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-03
+
+### Added
+- **Current-line lyrics marquee** — The active lyric line scrolls horizontally when it exceeds the pane width, measured in display cells so CJK lyrics scroll and fit correctly.
+- **Scored LRCLIB search** — Rank LRCLIB search results with release-type-aware matching instead of taking the first hit.
+- **Provider racing** — Race lyrics providers to calibrate query priority; the local file provider has been removed.
+
+### Fixed
+- **Netease match selection** — Pick the best match across all search queries instead of the first query that returns anything.
+- **Chinese duration fallback guardrails** — The duration-only fallback for Chinese lyrics now only applies to trusted (artist-bearing) searches and can never outrank a match that agrees on title, artist, or album, preventing unrelated Chinese lyrics from being cached for English tracks. LRCLIB matching behavior is unchanged.
+- **Provider errors surfaced** — Unreachable lyrics providers are reported instead of being masked as "no lyrics found", so temporary network failures no longer get cached as permanent misses.
+
+### Changed
+- **Marquee speed** — Scrolling text advances one character per frame (twice the previous speed).
+- **README** — Screenshots interspersed throughout the feature documentation.
+
 ## [0.2.2] - 2026-06-30
 
 ### Added
