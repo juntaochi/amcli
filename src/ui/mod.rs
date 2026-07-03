@@ -11,6 +11,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinHandle;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::artwork::converter::ArtworkConverter;
 use crate::artwork::ArtworkManager;
@@ -623,6 +624,9 @@ impl App {
     }
 }
 
+// The 8th argument (animation_frame) drives the current-line marquee; a param
+// struct for this single-caller draw helper would be over-engineering.
+#[allow(clippy::too_many_arguments)]
 fn draw_lyrics(
     f: &mut Frame,
     area: Rect,
@@ -631,6 +635,7 @@ fn draw_lyrics(
     unreachable: bool,
     theme: Theme,
     is_jp: bool,
+    animation_frame: u32,
 ) {
     let lyrics: &Lyrics = match lyrics {
         Some(l) => l,
@@ -666,6 +671,7 @@ fn draw_lyrics(
     let h = area.height as usize;
     let mid = h / 2;
 
+    let width = area.width as usize;
     let mut lines = Vec::new();
     for (i, line) in lyrics.lines.iter().enumerate() {
         let distance = (i as isize - current_index as isize).unsigned_abs();
@@ -681,7 +687,14 @@ fn draw_lyrics(
             // Tier 3: Far lines (beyond +-2) -- faded
             Style::default().fg(theme.dim)
         };
-        lines.push(Line::from(Span::styled(&line.text, style)));
+        // Marquee-scroll only the current line when it overflows the width;
+        // other lines stay put (and are truncated by the paragraph as before).
+        let text: Cow<str> = if i == current_index {
+            scroll_text(&line.text, width, animation_frame)
+        } else {
+            Cow::Borrowed(line.text.as_str())
+        };
+        lines.push(Line::from(Span::styled(text, style)));
     }
 
     let scroll = current_index.saturating_sub(mid) as u16;
@@ -1162,6 +1175,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 app.lyrics_unreachable,
                 theme,
                 is_jp,
+                app.animation_frame,
             );
         }
     }
@@ -1192,26 +1206,40 @@ fn format_duration(duration: Duration) -> String {
     format!("{:02}:{:02}", minutes, seconds)
 }
 
-// Optimized: Uses iterator chaining/cycling to avoid intermediate Vec<char> and format! allocations.
-// Benchmark: ~32% speedup (329ms vs 484ms for 100k iters).
+// Marquee scroll measured by display width (columns), so full-width CJK glyphs
+// trigger scrolling and fill the window correctly instead of overflowing.
 fn scroll_text<'a>(text: &'a str, width: usize, frame: u32) -> Cow<'a, str> {
-    let char_count = text.chars().count();
-    if char_count <= width {
+    if UnicodeWidthStr::width(text) <= width {
         return Cow::Borrowed(text);
     }
 
     let gap_len = 3;
-    let total_len = char_count + gap_len;
+    // Offset advances one character per two frames; wrap over text + gap.
+    let total_len = text.chars().count() + gap_len;
     let offset = (frame as usize / 2) % total_len;
 
-    Cow::Owned(
-        text.chars()
-            .chain(std::iter::repeat_n(' ', gap_len))
-            .cycle()
-            .skip(offset)
-            .take(width)
-            .collect(),
-    )
+    let mut result = String::new();
+    let mut used = 0usize;
+    for ch in text
+        .chars()
+        .chain(std::iter::repeat_n(' ', gap_len))
+        .cycle()
+        .skip(offset)
+    {
+        let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if used + ch_width > width {
+            // A wide glyph won't fit the last column -- pad with a space to keep
+            // the rendered width stable rather than letting it overflow.
+            if used < width {
+                result.push(' ');
+            }
+            break;
+        }
+        result.push(ch);
+        used += ch_width;
+    }
+
+    Cow::Owned(result)
 }
 
 #[cfg(test)]
@@ -1390,5 +1418,50 @@ mod tests {
 
         assert!(app.current_artwork_url.is_none());
         assert!(app.artwork_protocol.is_none());
+    }
+
+    #[test]
+    fn scroll_text_returns_borrowed_input_when_it_fits() {
+        let result = scroll_text("hello", 10, 7);
+
+        assert!(matches!(result, Cow::Borrowed(_)));
+        assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn scroll_text_ascii_overflow_shows_leading_window_at_frame_zero() {
+        assert_eq!(scroll_text("abcdefghij", 5, 0), "abcde");
+    }
+
+    #[test]
+    fn scroll_text_detects_overflow_by_display_width_for_cjk() {
+        // 10 chars but 20 display cells: width 12 overflows by cells, not by
+        // char count, so the marquee must advance across frames.
+        let text = "永遠に続く歌詞テスト";
+
+        let frame_zero = scroll_text(text, 12, 0);
+        let frame_two = scroll_text(text, 12, 2);
+
+        assert!(matches!(frame_zero, Cow::Owned(_)));
+        assert_ne!(frame_zero, frame_two);
+    }
+
+    #[test]
+    fn scroll_text_cjk_window_stays_within_display_width() {
+        let text = "永遠に続く歌詞テスト";
+        let width = 12;
+
+        for frame in 0..32 {
+            let result = scroll_text(text, width, frame);
+            let rendered = UnicodeWidthStr::width(result.as_ref());
+            // A wide glyph that misses the last column is padded with a space,
+            // so the window renders at exactly `width` or one cell short.
+            assert!(rendered <= width, "frame {frame}: {rendered} > {width}");
+            assert!(
+                rendered >= width - 1,
+                "frame {frame}: {rendered} < {}",
+                width - 1
+            );
+        }
     }
 }
