@@ -82,6 +82,14 @@ None yet.
 - [Research]: Phase 1 needs careful function signatures for artwork renderer -- borrow checker conflicts with StatefulProtocol and ThrobberState require narrow field slices
 - [Research]: Phase 3 artwork centering needs empirical testing for dimension snapping granularity with ratatui-image
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260703-h4n | Fix pre-release review findings in lyrics matching and UI marquee | 2026-07-03 | 0e449ad | [260703-h4n-fix-pre-release-review-findings-in-lyric](./quick/260703-h4n-fix-pre-release-review-findings-in-lyric/) |
+
+Last activity: 2026-07-03 - Completed quick task 260703-h4n: Fix pre-release review findings in lyrics matching and UI marquee
+
 ## Session Continuity
 
 Last session: 2026-03-26T15:58:41.692Z
