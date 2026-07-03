@@ -10,6 +10,21 @@ pub(crate) struct RemoteLyricsCandidate<'a> {
     pub duration: Option<Duration>,
 }
 
+#[derive(Clone, Copy, Default)]
+pub(crate) struct MatchOptions {
+    pub allow_chinese_duration_fallback: bool,
+}
+
+/// A match score tagged with whether it was granted solely through the
+/// Chinese duration fallback. Callers use the flag to tier matches: a
+/// duration-only fallback match must never outrank a match with textual
+/// agreement, no matter what bonuses are layered on top of the score.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct RemoteLyricsScore {
+    pub score: u16,
+    pub duration_only_fallback: bool,
+}
+
 pub(crate) fn track_cache_key(track: &Track) -> String {
     format!(
         "{}|{}|{}|{}",
@@ -24,6 +39,15 @@ pub(crate) fn remote_lyrics_match_score(
     track: &Track,
     candidate: &RemoteLyricsCandidate<'_>,
 ) -> Option<u16> {
+    remote_lyrics_match_score_with_options(track, candidate, MatchOptions::default())
+        .map(|score| score.score)
+}
+
+pub(crate) fn remote_lyrics_match_score_with_options(
+    track: &Track,
+    candidate: &RemoteLyricsCandidate<'_>,
+    options: MatchOptions,
+) -> Option<RemoteLyricsScore> {
     let candidate_title = candidate.track_name?;
     let title_matches = normalized_eq(&track.name, candidate_title);
 
@@ -41,8 +65,29 @@ pub(crate) fn remote_lyrics_match_score(
         .unwrap_or(false);
     let has_disambiguator = candidate_has_album || candidate.duration.is_some();
     let artist_matches = artist_matches(&track.artist, candidate.artist_names);
+    let chinese_duration_fallback = duration_matches
+        && !title_matches
+        && !artist_matches
+        && !album_matches
+        && options.allow_chinese_duration_fallback
+        && english_metadata_can_match_chinese_candidate(track, candidate);
 
-    if duration_matches && !(title_matches || artist_matches || album_matches) {
+    if duration_matches
+        && !(title_matches || artist_matches || album_matches || chinese_duration_fallback)
+    {
+        return None;
+    }
+
+    // Decoy guard for the Netease fallback-enabled path only: a Latin-titled
+    // duration+title match with a disagreeing artist is likely a same-title
+    // decoy there. On the default path (LRCLIB) this candidate remains valid.
+    if options.allow_chinese_duration_fallback
+        && duration_matches
+        && title_matches
+        && !artist_matches
+        && !album_matches
+        && latin_title_has_metadata_conflict(&track.name, candidate.artist_names)
+    {
         return None;
     }
 
@@ -75,7 +120,10 @@ pub(crate) fn remote_lyrics_match_score(
         score -= 20;
     }
 
-    Some(score)
+    Some(RemoteLyricsScore {
+        score,
+        duration_only_fallback: chinese_duration_fallback,
+    })
 }
 
 fn normalized_eq(left: &str, right: &str) -> bool {
@@ -196,6 +244,70 @@ fn artist_parts(value: &str) -> Vec<String> {
         .collect()
 }
 
+fn latin_title_has_metadata_conflict(track_title: &str, candidate_artists: &[&str]) -> bool {
+    is_latin_script_text(track_title)
+        && candidate_artists
+            .iter()
+            .any(|artist| !normalize_text(artist).is_empty())
+}
+
+fn english_metadata_can_match_chinese_candidate(
+    track: &Track,
+    candidate: &RemoteLyricsCandidate<'_>,
+) -> bool {
+    track_has_latin_metadata(track) && candidate_has_chinese_metadata(candidate)
+}
+
+fn track_has_latin_metadata(track: &Track) -> bool {
+    [&track.name, &track.artist, &track.album]
+        .iter()
+        .any(|value| is_latin_script_text(value))
+}
+
+fn candidate_has_chinese_metadata(candidate: &RemoteLyricsCandidate<'_>) -> bool {
+    let mut has_han = false;
+
+    for value in candidate
+        .track_name
+        .into_iter()
+        .chain(candidate.artist_names.iter().copied())
+        .chain(candidate.album_name)
+    {
+        for ch in value.chars() {
+            if is_kana_or_hangul(ch) {
+                return false;
+            }
+            if is_han(ch) {
+                has_han = true;
+            }
+        }
+    }
+
+    has_han
+}
+
+fn is_latin_script_text(value: &str) -> bool {
+    value.chars().any(|c| c.is_ascii_alphabetic())
+        && !value
+            .chars()
+            .any(|c| c.is_alphabetic() && !c.is_ascii_alphabetic())
+}
+
+fn is_han(ch: char) -> bool {
+    ('\u{3400}'..='\u{4dbf}').contains(&ch)
+        || ('\u{4e00}'..='\u{9fff}').contains(&ch)
+        || ('\u{f900}'..='\u{faff}').contains(&ch)
+}
+
+fn is_kana_or_hangul(ch: char) -> bool {
+    ('\u{3040}'..='\u{309f}').contains(&ch)
+        || ('\u{30a0}'..='\u{30ff}').contains(&ch)
+        || ('\u{ff66}'..='\u{ff9f}').contains(&ch)
+        || ('\u{1100}'..='\u{11ff}').contains(&ch)
+        || ('\u{3130}'..='\u{318f}').contains(&ch)
+        || ('\u{ac00}'..='\u{d7af}').contains(&ch)
+}
+
 fn duration_within_tolerance(left: Duration, right: Duration) -> bool {
     left.abs_diff(right) <= DURATION_TOLERANCE
 }
@@ -295,6 +407,130 @@ mod tests {
         };
 
         assert_eq!(remote_lyrics_match_score(&target, &candidate), None);
+    }
+
+    #[test]
+    fn rejects_same_latin_title_and_duration_when_latin_artist_disagrees() {
+        let target = Track {
+            name: "ONE DAY".into(),
+            artist: "A-YUE CHANG".into(),
+            album: "我想要的感觉".into(),
+            duration: Duration::from_secs(240),
+            position: Duration::ZERO,
+        };
+        let artist_names = ["Different Artist"];
+        let candidate = RemoteLyricsCandidate {
+            track_name: Some("One Day"),
+            artist_names: &artist_names,
+            album_name: Some("Different Album"),
+            duration: Some(Duration::from_secs(240)),
+        };
+
+        assert_eq!(
+            remote_lyrics_match_score_with_options(
+                &target,
+                &candidate,
+                MatchOptions {
+                    allow_chinese_duration_fallback: true,
+                },
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn rejects_latin_title_duration_match_when_non_latin_artist_and_album_disagree() {
+        let target = Track {
+            name: "ONE DAY".into(),
+            artist: "A-YUE CHANG".into(),
+            album: "我想要的感觉".into(),
+            duration: Duration::from_secs(240),
+            position: Duration::ZERO,
+        };
+        let artist_names = ["小野リサ"];
+        let candidate = RemoteLyricsCandidate {
+            track_name: Some("One Day"),
+            artist_names: &artist_names,
+            album_name: Some("One Day"),
+            duration: Some(Duration::from_secs(240)),
+        };
+
+        assert_eq!(
+            remote_lyrics_match_score_with_options(
+                &target,
+                &candidate,
+                MatchOptions {
+                    allow_chinese_duration_fallback: true,
+                },
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn default_options_accept_latin_title_duration_match_with_artist_mismatch() {
+        // LRCLIB regression gate: with default options the latin-title decoy
+        // guard must NOT fire — behavior identical to git HEAD (Some(250):
+        // 100 base + 100 duration + 50 title).
+        let target = Track {
+            name: "ONE DAY".into(),
+            artist: "A-YUE CHANG".into(),
+            album: "我想要的感觉".into(),
+            duration: Duration::from_secs(240),
+            position: Duration::ZERO,
+        };
+
+        let latin_artist_names = ["Different Artist"];
+        let latin_candidate = RemoteLyricsCandidate {
+            track_name: Some("One Day"),
+            artist_names: &latin_artist_names,
+            album_name: Some("Different Album"),
+            duration: Some(Duration::from_secs(240)),
+        };
+        assert_eq!(
+            remote_lyrics_match_score(&target, &latin_candidate),
+            Some(250)
+        );
+
+        let non_latin_artist_names = ["小野リサ"];
+        let non_latin_candidate = RemoteLyricsCandidate {
+            track_name: Some("One Day"),
+            artist_names: &non_latin_artist_names,
+            album_name: Some("One Day"),
+            duration: Some(Duration::from_secs(240)),
+        };
+        assert_eq!(
+            remote_lyrics_match_score(&target, &non_latin_candidate),
+            Some(250)
+        );
+    }
+
+    #[test]
+    fn accepts_english_apple_metadata_against_chinese_netease_metadata_by_duration() {
+        let target = Track {
+            name: "One Day".into(),
+            artist: "A-YUE CHANG".into(),
+            album: "The Feeling I Want".into(),
+            duration: Duration::from_secs(240),
+            position: Duration::ZERO,
+        };
+        let artist_names = ["张震岳"];
+        let candidate = RemoteLyricsCandidate {
+            track_name: Some("有一天"),
+            artist_names: &artist_names,
+            album_name: Some("我想要的感觉"),
+            duration: Some(Duration::from_secs(240)),
+        };
+
+        let score = remote_lyrics_match_score_with_options(
+            &target,
+            &candidate,
+            MatchOptions {
+                allow_chinese_duration_fallback: true,
+            },
+        )
+        .expect("duration fallback should match");
+        assert!(score.duration_only_fallback);
     }
 
     #[test]

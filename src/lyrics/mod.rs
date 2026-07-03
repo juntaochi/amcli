@@ -245,7 +245,7 @@ async fn probe_provider(
 mod tests {
     use super::*;
     use crate::lyrics::provider::LyricsProvider;
-    use crate::lyrics::{lrclib::LrclibProvider, netease::NeteaseProvider};
+    use crate::lyrics::{lrclib::LRCLIB_PRIORITY, netease::NETEASE_PRIORITY};
     use async_trait::async_trait;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -400,10 +400,7 @@ mod tests {
 
     #[test]
     fn provider_priorities_try_netease_before_lrclib() {
-        let lrclib = LrclibProvider::new();
-        let netease = NeteaseProvider::new();
-
-        assert!(netease.priority() < lrclib.priority());
+        assert!(NETEASE_PRIORITY < LRCLIB_PRIORITY);
     }
 
     enum TestOutcome {

@@ -1,4 +1,6 @@
-use crate::lyrics::matching::{remote_lyrics_match_score, RemoteLyricsCandidate};
+use crate::lyrics::matching::{
+    remote_lyrics_match_score_with_options, MatchOptions, RemoteLyricsCandidate, RemoteLyricsScore,
+};
 use crate::lyrics::parser::parse_lrc;
 use crate::lyrics::provider::LyricsProvider;
 use crate::lyrics::Lyrics;
@@ -13,9 +15,36 @@ const SEARCH_RANK_BONUS: u16 = 120;
 const SEARCH_RANK_DECAY: u16 = 6;
 const DURATION_MATCH_BONUS: u16 = 200;
 const DURATION_TOLERANCE: Duration = Duration::from_secs(3);
+pub(crate) const NETEASE_PRIORITY: u8 = 5;
 
 pub struct NeteaseProvider {
     client: Client,
+}
+
+/// A Netease search query tagged with whether its results can be trusted for
+/// the Chinese duration fallback. A query is trusted iff it was built with a
+/// non-empty artist component — the bare-title query is never trusted, no
+/// matter where dedup places it in the query list.
+#[derive(Debug, PartialEq, Eq)]
+struct SearchQuery {
+    query: String,
+    trusted: bool,
+}
+
+/// A scored Netease song candidate. Matches are compared tier-first: a match
+/// with textual agreement always outranks a Chinese duration-only fallback
+/// match, no matter how large the fallback's rank/duration bonuses are.
+#[derive(Clone, Copy)]
+struct SongMatch {
+    score: u16,
+    duration_only_fallback: bool,
+    id: i64,
+}
+
+impl SongMatch {
+    fn tier_key(&self) -> (bool, u16) {
+        (!self.duration_only_fallback, self.score)
+    }
 }
 
 impl NeteaseProvider {
@@ -29,61 +58,95 @@ impl NeteaseProvider {
         }
     }
 
-    fn best_song_match(json: &Value, track: &Track) -> Option<(u16, i64)> {
+    fn best_song_match(
+        json: &Value,
+        track: &Track,
+        allow_chinese_duration_fallback: bool,
+    ) -> Option<SongMatch> {
         json["result"]["songs"]
             .as_array()?
             .iter()
             .enumerate()
             .filter_map(|(rank, song)| {
                 let id = song["id"].as_i64()?;
-                Self::ranked_song_match_score(song, track, rank).map(|score| (score, rank, id))
+                Self::ranked_song_match_score(song, track, rank, allow_chinese_duration_fallback)
+                    .map(|score| {
+                        (
+                            SongMatch {
+                                score: score.score,
+                                duration_only_fallback: score.duration_only_fallback,
+                                id,
+                            },
+                            rank,
+                        )
+                    })
             })
-            .max_by(|(left_score, left_rank, _), (right_score, right_rank, _)| {
-                left_score
-                    .cmp(right_score)
+            .max_by(|(left, left_rank), (right, right_rank)| {
+                left.tier_key()
+                    .cmp(&right.tier_key())
                     .then_with(|| right_rank.cmp(left_rank))
             })
-            .map(|(score, _, id)| (score, id))
+            .map(|(song_match, _)| song_match)
     }
 
     #[cfg(test)]
     fn select_song_id(json: &Value, track: &Track) -> Option<i64> {
-        Self::best_song_match(json, track).map(|(_, id)| id)
+        Self::best_song_match(json, track, true).map(|song_match| song_match.id)
     }
 
     #[cfg(test)]
     fn select_song_id_from_results(results: &[Value], track: &Track) -> Option<i64> {
         results
             .iter()
-            .filter_map(|json| Self::best_song_match(json, track))
-            .reduce(|best, candidate| {
-                if candidate.0 > best.0 {
-                    candidate
-                } else {
-                    best
-                }
-            })
-            .map(|(_, id)| id)
+            .filter_map(|json| Self::best_song_match(json, track, true))
+            .reduce(Self::better_song_match)
+            .map(|song_match| song_match.id)
     }
 
-    fn search_queries(track: &Track) -> Vec<String> {
+    #[cfg(test)]
+    fn select_song_id_from_search_results(results: &[(Value, bool)], track: &Track) -> Option<i64> {
+        results
+            .iter()
+            .filter_map(|(json, trusted)| Self::best_song_match(json, track, *trusted))
+            .reduce(Self::better_song_match)
+            .map(|song_match| song_match.id)
+    }
+
+    fn better_song_match(best: SongMatch, candidate: SongMatch) -> SongMatch {
+        if candidate.tier_key() > best.tier_key() {
+            candidate
+        } else {
+            best
+        }
+    }
+
+    fn search_queries(track: &Track) -> Vec<SearchQuery> {
+        let has_artist = !track.artist.trim().is_empty();
         let mut queries = Vec::new();
-        Self::push_search_query(&mut queries, &[&track.name, &track.album, &track.artist]);
-        Self::push_search_query(&mut queries, &[&track.name, &track.artist]);
-        Self::push_search_query(&mut queries, &[&track.name]);
+        Self::push_search_query(
+            &mut queries,
+            &[&track.name, &track.album, &track.artist],
+            has_artist,
+        );
+        Self::push_search_query(&mut queries, &[&track.name, &track.artist], has_artist);
+        Self::push_search_query(&mut queries, &[&track.name], false);
         queries
     }
 
-    fn push_search_query(queries: &mut Vec<String>, parts: &[&str]) {
-        let query = parts
-            .iter()
-            .map(|part| part.trim())
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join(" ");
+    fn push_search_query(queries: &mut Vec<SearchQuery>, parts: &[&str], trusted: bool) {
+        let mut included: Vec<&str> = Vec::new();
+        for part in parts {
+            let part = part.trim();
+            if !part.is_empty() && !included.contains(&part) {
+                included.push(part);
+            }
+        }
+        let query = included.join(" ");
 
-        if !query.is_empty() && !queries.iter().any(|existing| existing == &query) {
-            queries.push(query);
+        // Dedup keeps the FIRST occurrence: queries are pushed
+        // most-specific-first, so a later duplicate never carries more trust.
+        if !query.is_empty() && !queries.iter().any(|existing| existing.query == query) {
+            queries.push(SearchQuery { query, trusted });
         }
     }
 
@@ -112,7 +175,11 @@ impl NeteaseProvider {
         format!("https://music.163.com/api/v1/album/{}", album_id)
     }
 
-    fn song_match_score(song: &Value, track: &Track) -> Option<u16> {
+    fn song_match_score(
+        song: &Value,
+        track: &Track,
+        allow_chinese_duration_fallback: bool,
+    ) -> Option<RemoteLyricsScore> {
         let artist_names = Self::artist_names(song);
         let candidate = RemoteLyricsCandidate {
             track_name: song["name"].as_str(),
@@ -123,15 +190,26 @@ impl NeteaseProvider {
             duration: Self::song_duration(song),
         };
 
-        remote_lyrics_match_score(track, &candidate)
+        remote_lyrics_match_score_with_options(
+            track,
+            &candidate,
+            MatchOptions {
+                allow_chinese_duration_fallback,
+            },
+        )
     }
 
-    fn ranked_song_match_score(song: &Value, track: &Track, rank: usize) -> Option<u16> {
-        Some(
-            Self::song_match_score(song, track)?
-                + Self::search_rank_score(rank)
-                + Self::duration_score(song, track),
-        )
+    fn ranked_song_match_score(
+        song: &Value,
+        track: &Track,
+        rank: usize,
+        allow_chinese_duration_fallback: bool,
+    ) -> Option<RemoteLyricsScore> {
+        let base = Self::song_match_score(song, track, allow_chinese_duration_fallback)?;
+        Some(RemoteLyricsScore {
+            score: base.score + Self::search_rank_score(rank) + Self::duration_score(song, track),
+            duration_only_fallback: base.duration_only_fallback,
+        })
     }
 
     fn search_rank_score(rank: usize) -> u16 {
@@ -336,18 +414,18 @@ impl LyricsProvider for NeteaseProvider {
         // lets a polluted result set lock onto a same-title decoy (e.g. a generic
         // "Love Me Now" by another artist whose duration happens to land within
         // tolerance), even when a cleaner query holds the correct track.
-        let searches = Self::search_queries(track).into_iter().map(|query| {
+        let searches = Self::search_queries(track).into_iter().map(|search| {
             let client = &self.client;
             async move {
                 let json = client
-                    .get(Self::search_url(&query))
+                    .get(Self::search_url(&search.query))
                     .send()
                     .await
                     .ok()?
                     .json::<Value>()
                     .await
                     .ok()?;
-                Self::best_song_match(&json, track)
+                Self::best_song_match(&json, track, search.trusted)
             }
         });
 
@@ -355,15 +433,9 @@ impl LyricsProvider for NeteaseProvider {
             .await
             .into_iter()
             .flatten()
-            .reduce(|best, candidate| {
-                if candidate.0 > best.0 {
-                    candidate
-                } else {
-                    best
-                }
-            });
+            .reduce(Self::better_song_match);
 
-        let mut song_id = best_match.map(|(_, id)| id);
+        let mut song_id = best_match.map(|song_match| song_match.id);
         if song_id.is_none() {
             song_id = self.get_album_alias_song_id(track).await?;
         }
@@ -395,7 +467,7 @@ impl LyricsProvider for NeteaseProvider {
     }
 
     fn priority(&self) -> u8 {
-        5
+        NETEASE_PRIORITY
     }
 
     fn name(&self) -> &'static str {

@@ -12,6 +12,7 @@ use serde_json::Value;
 use std::time::Duration;
 
 const LRCLIB_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+pub(crate) const LRCLIB_PRIORITY: u8 = 10;
 
 pub struct LrclibProvider {
     client: Client,
@@ -161,7 +162,7 @@ impl LyricsProvider for LrclibProvider {
     }
 
     fn priority(&self) -> u8 {
-        10
+        LRCLIB_PRIORITY
     }
 
     fn name(&self) -> &'static str {

@@ -20,6 +20,16 @@ fn localized_title_track() -> Track {
     }
 }
 
+fn english_metadata_chinese_song_track() -> Track {
+    Track {
+        name: "One Day".into(),
+        artist: "A-YUE CHANG".into(),
+        album: "The Feeling I Want".into(),
+        duration: Duration::from_secs(240),
+        position: Duration::ZERO,
+    }
+}
+
 #[test]
 fn selects_matching_netease_song_instead_of_first_search_result() {
     let json = serde_json::json!({
@@ -143,11 +153,48 @@ fn builds_album_artist_search_before_fallbacks() {
     assert_eq!(
         NeteaseProvider::search_queries(&target),
         vec![
-            "小情歌 小宇宙 SODAGREEN".to_string(),
-            "小情歌 SODAGREEN".to_string(),
-            "小情歌".to_string()
+            SearchQuery {
+                query: "小情歌 小宇宙 SODAGREEN".to_string(),
+                trusted: true,
+            },
+            SearchQuery {
+                query: "小情歌 SODAGREEN".to_string(),
+                trusted: true,
+            },
+            SearchQuery {
+                query: "小情歌".to_string(),
+                trusted: false,
+            },
         ]
     );
+}
+
+#[test]
+fn search_queries_keep_bare_title_untrusted_when_dedup_shifts_ranks() {
+    // The old positional gate (query_rank < 2) wrongly trusted the bare-title
+    // query whenever dedup shortened the list. Trust must be semantic.
+    let expected = vec![
+        SearchQuery {
+            query: "Same Song Same Artist".to_string(),
+            trusted: true,
+        },
+        SearchQuery {
+            query: "Same Song".to_string(),
+            trusted: false,
+        },
+    ];
+
+    let empty_album = Track {
+        album: "".into(),
+        ..track()
+    };
+    assert_eq!(NeteaseProvider::search_queries(&empty_album), expected);
+
+    let self_titled = Track {
+        album: "Same Song".into(),
+        ..track()
+    };
+    assert_eq!(NeteaseProvider::search_queries(&self_titled), expected);
 }
 
 #[test]
@@ -302,6 +349,141 @@ fn selects_netease_song_with_traditional_title_and_english_artist() {
     assert_eq!(
         NeteaseProvider::select_song_id(&json, &target),
         Some(277302)
+    );
+}
+
+#[test]
+fn selects_chinese_metadata_match_over_japanese_same_title_decoy() {
+    let json = serde_json::json!({
+        "result": {
+            "songs": [
+                {
+                    "id": 1,
+                    "name": "One Day",
+                    "ar": [{"name": "小野リサ"}],
+                    "al": {"name": "One Day"},
+                    "dt": 240000
+                },
+                {
+                    "id": 2,
+                    "name": "有一天",
+                    "ar": [{"name": "张震岳"}],
+                    "al": {"name": "我想要的感觉"},
+                    "dt": 240000
+                }
+            ]
+        }
+    });
+
+    assert_eq!(
+        NeteaseProvider::select_song_id(&json, &english_metadata_chinese_song_track()),
+        Some(2)
+    );
+}
+
+#[test]
+fn rejects_title_only_chinese_duration_match_for_english_song() {
+    let empty_results = serde_json::json!({
+        "result": {
+            "songs": []
+        }
+    });
+    let title_only_results = serde_json::json!({
+        "result": {
+            "songs": [
+                {
+                    "id": 1,
+                    "name": "有一天",
+                    "ar": [{"name": "张震岳"}],
+                    "al": {"name": "我想要的感觉"},
+                    "dt": 240000
+                }
+            ]
+        }
+    });
+
+    assert_eq!(
+        NeteaseProvider::select_song_id_from_search_results(
+            &[
+                (empty_results.clone(), true),
+                (empty_results, true),
+                (title_only_results, false)
+            ],
+            &english_metadata_chinese_song_track()
+        ),
+        None
+    );
+}
+
+#[test]
+fn prefers_textual_match_over_higher_scoring_duration_fallback_across_queries() {
+    // Result set A (trusted): a genuine title+artist+album match whose duration
+    // is 4s off (outside tolerance -> no duration bonus, raw score stays low).
+    let genuine_results = serde_json::json!({
+        "result": {
+            "songs": [
+                {
+                    "id": 10,
+                    "name": "One Day",
+                    "ar": [{"name": "A-YUE CHANG"}],
+                    "al": {"name": "The Feeling I Want"},
+                    "dt": 244000
+                }
+            ]
+        }
+    });
+    // Result set B (trusted): a Han-metadata duration-only fallback candidate
+    // whose rank + duration bonuses would out-score the genuine match.
+    let fallback_results = serde_json::json!({
+        "result": {
+            "songs": [
+                {
+                    "id": 20,
+                    "name": "有一天",
+                    "ar": [{"name": "张震岳"}],
+                    "al": {"name": "我想要的感觉"},
+                    "dt": 240000
+                }
+            ]
+        }
+    });
+
+    assert_eq!(
+        NeteaseProvider::select_song_id_from_search_results(
+            &[(genuine_results, true), (fallback_results, true)],
+            &english_metadata_chinese_song_track()
+        ),
+        Some(10)
+    );
+}
+
+#[test]
+fn rejects_untrusted_duration_fallback_regardless_of_query_rank() {
+    let title_only_results = serde_json::json!({
+        "result": {
+            "songs": [
+                {
+                    "id": 1,
+                    "name": "有一天",
+                    "ar": [{"name": "张震岳"}],
+                    "al": {"name": "我想要的感觉"},
+                    "dt": 240000
+                }
+            ]
+        }
+    });
+
+    // Duration-only Han fallback candidates in UNTRUSTED result sets must be
+    // rejected even at ranks 0 and 1, where the old positional gate allowed them.
+    assert_eq!(
+        NeteaseProvider::select_song_id_from_search_results(
+            &[
+                (title_only_results.clone(), false),
+                (title_only_results, false)
+            ],
+            &english_metadata_chinese_song_track()
+        ),
+        None
     );
 }
 
