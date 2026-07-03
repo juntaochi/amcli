@@ -1214,9 +1214,9 @@ fn scroll_text<'a>(text: &'a str, width: usize, frame: u32) -> Cow<'a, str> {
     }
 
     let gap_len = 3;
-    // Offset advances one character per two frames; wrap over text + gap.
+    // Offset advances one character per frame; wrap over text + gap.
     let total_len = text.chars().count() + gap_len;
-    let offset = (frame as usize / 2) % total_len;
+    let offset = (frame as usize) % total_len;
 
     let mut result = String::new();
     let mut used = 0usize;
