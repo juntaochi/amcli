@@ -949,7 +949,7 @@ fn draw_metadata(
                         .add_modifier(Modifier::ITALIC),
                 )));
 
-                let display_val = scroll_text(&values[i], col_width, animation_frame);
+                let display_val = scroll_text(values[i], col_width, animation_frame);
 
                 lines.push(Line::from(Span::styled(
                     format!(" {} ", display_val),
@@ -985,7 +985,7 @@ fn draw_metadata(
                     .add_modifier(Modifier::ITALIC),
             )));
 
-            let display_val = scroll_text(&values[i], col_width, animation_frame);
+            let display_val = scroll_text(values[i], col_width, animation_frame);
 
             lines.push(Line::from(Span::styled(
                 format!(" {} ", display_val),
