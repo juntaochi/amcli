@@ -92,7 +92,7 @@
 ### 🚀 快速开始
 
 > [!TIP]
-> **项目状态：** 阶段 1-3 已完成（核心基础 + 专辑封面 + 歌词系统）。Phase 3 实现了完整的在线/本地歌词集成。
+> **项目状态：** 阶段 1-3 已完成（核心基础 + 专辑封面 + 歌词系统）。Phase 3 实现了完整的 LRCLIB + 网易云在线歌词集成。
 
 #### 安装
 
@@ -289,7 +289,7 @@ show_help_on_start = true
 ### 🚀 Quick Start
 
 > [!TIP]
-> **Project Status:** Phase 1-3 completed (Core Foundation + Album Artwork + Lyrics System). Phase 3 implemented full online/local lyrics integration.
+> **Project Status:** Phase 1-3 completed (Core Foundation + Album Artwork + Lyrics System). Phase 3 implemented full LRCLIB + Netease online lyrics integration.
 
 #### Installation
 

@@ -280,10 +280,9 @@ async fn test_ui_rendering() {
 | Module | File | Risk | Priority |
 |--------|------|------|----------|
 | Config loading/saving | `src/config/mod.rs` | Config corruption, wrong defaults | Medium |
-| Lyrics manager orchestration | `src/lyrics/mod.rs` | Provider fallback chain, cache behavior | High |
+| Lyrics manager orchestration | `src/lyrics/mod.rs` | Provider racing/calibration, cache behavior | High |
 | Lyrics providers (Netease) | `src/lyrics/netease.rs` | API parsing failures | Medium |
 | Lyrics providers (LRCLIB) | `src/lyrics/lrclib.rs` | Two-stage lookup logic, response parsing | Medium |
-| Lyrics providers (Local) | `src/lyrics/local.rs` | File pattern matching | Low |
 | Artwork manager | `src/artwork/mod.rs` | Duotone algorithm, pixelation, cache integration | Medium |
 | Artwork cache | `src/artwork/cache.rs` | Disk I/O, cache eviction, hash collisions | Medium |
 | Artwork converter | `src/artwork/converter.rs` | Protocol selection logic | Low |

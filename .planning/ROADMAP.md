@@ -12,9 +12,9 @@ Transform AMCLI's working-but-rough TUI into a polished layout that fills and ce
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Draw Function Decomposition** - Break monolithic draw() into orchestrator + isolated section renderers
-- [ ] **Phase 2: Proportional Layout & Spacing System** - Replace legacy constraints with Fill-based proportional layout and unified spacing constants
-- [ ] **Phase 3: Section-Level Polish** - Center artwork, distribute buttons, align metadata, highlight lyrics
+- [x] **Phase 1: Draw Function Decomposition** - Break monolithic draw() into orchestrator + isolated section renderers
+- [x] **Phase 2: Proportional Layout & Spacing System** - Replace legacy constraints with Fill-based proportional layout and unified spacing constants
+- [x] **Phase 3: Section-Level Polish** - Center artwork, distribute buttons, align metadata, highlight lyrics
 
 ## Phase Details
 
@@ -60,15 +60,17 @@ Plans:
 
 Plans:
 - [x] 03-01-PLAN.md -- Center artwork with Rect::centered(), distribute buttons with Fill(1)
-- [ ] 03-02-PLAN.md -- Align metadata columns, add 3-tier graduated lyrics dimming
+- [x] 03-02-PLAN.md -- Align metadata columns, add 3-tier graduated lyrics dimming
 
 ## Progress
 
 **Execution Order:**
 Phases execute in numeric order: 1 -> 2 -> 3
 
+**Status note (2026-07-08):** Phase checkboxes were reconciled against phase summaries and `src/ui/mod.rs`. Automated implementation and `make verify` evidence exist for all three phases; the remaining checkpoint is human visual verification of Phase 3 polish.
+
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Draw Function Decomposition | 2/2 | Complete | 2026-03-26 |
-| 2. Proportional Layout & Spacing System | 0/1 | Planned | - |
-| 3. Section-Level Polish | 0/2 | Planned | - |
+| 2. Proportional Layout & Spacing System | 1/1 | Complete | 2026-03-26 |
+| 3. Section-Level Polish | 2/2 | Complete (automated); human visual verification pending | 2026-03-26 |

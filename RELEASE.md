@@ -2,6 +2,8 @@
 
 This document provides a step-by-step guide for releasing AMCLI.
 
+> Current-state note: this checklist is version-agnostic. Set `VERSION` from `Cargo.toml`/the intended git tag before running commands; do not reuse archived `v0.1.0` manual release steps for current releases.
+
 ## Pre-Release Preparation / 发布前准备
 
 ### 1. Code Quality / 代码质量
@@ -39,7 +41,7 @@ This document provides a step-by-step guide for releasing AMCLI.
 
 ```bash
 # Set the version (without 'v' prefix)
-VERSION="0.1.0"
+VERSION="0.3.0"  # update to the intended Cargo.toml version
 
 # Create annotated tag
 git tag -a "v${VERSION}" -m "Release version ${VERSION}"
@@ -109,7 +111,7 @@ This will automatically trigger the GitHub Actions release workflow which will:
 1. Download the release artifacts:
    ```bash
    cd /tmp
-   VERSION="0.1.0"
+   VERSION="0.3.0"  # update to the intended Cargo.toml version
 
    curl -LO "https://github.com/juntaochi/amcli/releases/download/v${VERSION}/amcli-v${VERSION}-arm64-apple-darwin.tar.gz"
    curl -LO "https://github.com/juntaochi/amcli/releases/download/v${VERSION}/amcli-v${VERSION}-x86_64-apple-darwin.tar.gz"
@@ -212,9 +214,9 @@ We follow [Semantic Versioning](https://semver.org/):
 - **PATCH** version: Bug fixes (backwards compatible)
 
 Examples:
-- `0.1.0` → First release
-- `0.1.1` → Bug fix
-- `0.2.0` → New features
+- `0.3.0` → Current documented release baseline
+- `0.3.1` → Bug fix
+- `0.4.0` → New features
 - `1.0.0` → Stable release
 
 ## Automation Ideas / 自动化建议

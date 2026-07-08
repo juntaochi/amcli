@@ -35,7 +35,7 @@ CI runs on macOS with `--all-features` on all steps. Use `make verify` (runs `sc
 
 - **`src/ui/mod.rs`** — `App` struct is the central state hub. Contains all rendering logic (Ratatui), keyboard handling, and application state. Has a modal settings menu (`src/ui/settings.rs`). Supports 6 color themes.
 - **`src/player/`** — `MediaPlayer` trait defines the player abstraction. `AppleMusicController` implements it by executing AppleScript via `osascript` CLI. Uses `CommandRunner` trait for testability (mocked with `mockall`).
-- **`src/lyrics/`** — Multi-provider lyrics system with priority: local files → Netease → LRCLIB. Parses LRC format with timestamp regex. `LyricsManager` orchestrates providers via the `LyricsProvider` trait.
+- **`src/lyrics/`** — Multi-provider lyrics system using LRCLIB + Netease online providers with provider racing/calibration. Parses LRC format with timestamp regex. `LyricsManager` orchestrates providers via the `LyricsProvider` trait.
 - **`src/artwork/`** — Album art with LRU caching (`cache.rs`). Protocol conversion (Sixel, Kitty, halfblocks) via `ratatui-image` in `converter.rs`.
 - **`src/config/`** — TOML-based config with serde. Supports language (en/ja), theme selection, artwork mode, mosaic effects.
 
@@ -264,7 +264,7 @@ A macOS terminal UI application for controlling Apple Music. Renders album artwo
 - `src/player/mod.rs` exports `Track`, `PlaybackState`, `RepeatMode`, `PlayerStatus`, `MediaPlayer` trait
 - `src/lyrics/mod.rs` exports `LyricLine`, `Lyrics`, `LyricsManager` and sub-module paths
 - `src/ui/mod.rs` exports `App`, `draw`, theme constants, `MetadataCache`
-- No barrel re-exports. Consumers use full paths: `crate::lyrics::local::LocalProvider`, `crate::player::apple_music::AppleMusicController`
+- No barrel re-exports. Consumers use full paths such as `crate::lyrics::lrclib::LrclibProvider`, `crate::lyrics::netease::NeteaseProvider`, and `crate::player::apple_music::AppleMusicController`.
 - `MediaPlayer` trait (`src/player/mod.rs`) abstracts the player backend -- allows mock injection for testing
 - `CommandRunner` trait (`src/player/apple_music.rs`) abstracts the osascript execution -- enables unit testing without Apple Music
 - `LyricsProvider` trait (`src/lyrics/provider.rs`) with `priority()` method for ordered provider chain
@@ -298,7 +298,7 @@ A macOS terminal UI application for controlling Apple Music. Renders album artwo
 - Purpose: Central state hub, rendering logic, keyboard input delegation, async task management
 - Location: `src/ui/mod.rs`, `src/ui/settings.rs`
 - Contains: `App` struct (all mutable state), `draw()` function (all rendering), `Theme` definitions, `MetadataCache`, `SettingsMenu`
-- Depends on: `player` (MediaPlayer trait, Track, RepeatMode), `lyrics` (LyricsManager, Lyrics, all providers), `artwork` (ArtworkManager, ArtworkConverter), `config` (Config, Language)
+- Depends on: `player` (MediaPlayer trait, Track, RepeatMode), `lyrics` (LyricsManager, Lyrics, LRCLIB/Netease providers), `artwork` (ArtworkManager, ArtworkConverter), `config` (Config, Language)
 - Used by: `main.rs` (creates App, calls draw, dispatches key events)
 - Purpose: Define the media player interface and implement Apple Music control via AppleScript
 - Location: `src/player/mod.rs`, `src/player/apple_music.rs`
@@ -306,9 +306,9 @@ A macOS terminal UI application for controlling Apple Music. Renders album artwo
 - Depends on: `tokio::process::Command`, `reqwest` (for iTunes artwork API), `lru` (artwork URL cache)
 - Used by: `ui` module (via `Box<dyn MediaPlayer>`)
 - Purpose: Multi-provider lyrics fetching with LRC parsing and LRU caching
-- Location: `src/lyrics/mod.rs`, `src/lyrics/provider.rs`, `src/lyrics/parser.rs`, `src/lyrics/local.rs`, `src/lyrics/netease.rs`, `src/lyrics/lrclib.rs`
-- Contains: `LyricsManager`, `LyricsProvider` trait, `Lyrics`, `LyricLine`, `parse_lrc()`, three provider implementations
-- Depends on: `player` (Track struct), `reqwest` (HTTP for Netease/LRCLIB), `tokio::fs` (local file provider)
+- Location: `src/lyrics/mod.rs`, `src/lyrics/provider.rs`, `src/lyrics/parser.rs`, `src/lyrics/netease.rs`, `src/lyrics/lrclib.rs`
+- Contains: `LyricsManager`, `LyricsProvider` trait, `Lyrics`, `LyricLine`, `parse_lrc()`, and two online provider implementations
+- Depends on: `player` (Track struct), `reqwest` (HTTP for Netease/LRCLIB)
 - Used by: `ui` module (via `Arc<LyricsManager>`)
 - Purpose: Download, cache, theme, and convert album artwork images for terminal rendering
 - Location: `src/artwork/mod.rs`, `src/artwork/cache.rs`, `src/artwork/converter.rs`
@@ -337,7 +337,7 @@ A macOS terminal UI application for controlling Apple Music. Renders album artwo
 - Pattern: `#[cfg_attr(test, automock)]` generates mock at compile time
 - Purpose: Abstract over different lyrics data sources
 - Definition: `src/lyrics/provider.rs`
-- Implementations: `LocalProvider` (`src/lyrics/local.rs`), `LrclibProvider` (`src/lyrics/lrclib.rs`), `NeteaseProvider` (`src/lyrics/netease.rs`)
+- Implementations: `LrclibProvider` (`src/lyrics/lrclib.rs`), `NeteaseProvider` (`src/lyrics/netease.rs`). The local file provider was removed in v0.3.0.
 - Pattern: `#[async_trait]` with `Box<dyn LyricsProvider>` stored in `Vec` inside `LyricsManager`, wrapped in `Arc` for sharing across tasks
 - Priority system: `fn priority(&self) -> u8` determines query order (lower first)
 - Purpose: Define color schemes for the entire UI
@@ -350,7 +350,7 @@ A macOS terminal UI application for controlling Apple Music. Renders album artwo
 - Responsibilities: Parse CLI args, set up tracing, install panic hook, initialize terminal (raw mode, alternate screen), create `App`, run event loop, restore terminal on exit
 - Location: `src/ui/mod.rs` line 151
 - Triggers: Called once from `main()`
-- Responsibilities: Load config from TOML, create `AppleMusicController`, set up `ArtworkManager` with cache directory, initialize `LyricsManager` with all three providers, create `SettingsMenu`
+- Responsibilities: Load config from TOML, create `AppleMusicController`, set up `ArtworkManager` with cache directory, initialize `LyricsManager` with LRCLIB and Netease providers, create `SettingsMenu`
 - Location: `src/ui/mod.rs` line 391
 - Triggers: Called from event loop every 500ms
 - Responsibilities: Poll Apple Music for current state, detect track changes, manage background tasks for lyrics and artwork, update metadata cache

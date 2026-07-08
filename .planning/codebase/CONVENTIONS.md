@@ -223,7 +223,7 @@ use crate::player::{apple_music::AppleMusicController, MediaPlayer, RepeatMode, 
 - `src/ui/mod.rs` exports `App`, `draw`, theme constants, `MetadataCache`
 
 **Barrel Files:**
-- No barrel re-exports. Consumers use full paths: `crate::lyrics::local::LocalProvider`, `crate::player::apple_music::AppleMusicController`
+- No barrel re-exports. Consumers use full paths such as `crate::lyrics::lrclib::LrclibProvider`, `crate::lyrics::netease::NeteaseProvider`, and `crate::player::apple_music::AppleMusicController`.
 
 **Trait-based abstractions:**
 - `MediaPlayer` trait (`src/player/mod.rs`) abstracts the player backend -- allows mock injection for testing

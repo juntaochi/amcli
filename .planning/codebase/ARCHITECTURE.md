@@ -38,9 +38,9 @@
 
 **Lyrics System (`lyrics`):**
 - Purpose: Multi-provider lyrics fetching with LRC parsing and LRU caching
-- Location: `src/lyrics/mod.rs`, `src/lyrics/provider.rs`, `src/lyrics/parser.rs`, `src/lyrics/local.rs`, `src/lyrics/netease.rs`, `src/lyrics/lrclib.rs`
-- Contains: `LyricsManager`, `LyricsProvider` trait, `Lyrics`, `LyricLine`, `parse_lrc()`, three provider implementations
-- Depends on: `player` (Track struct), `reqwest` (HTTP for Netease/LRCLIB), `tokio::fs` (local file provider)
+- Location: `src/lyrics/mod.rs`, `src/lyrics/provider.rs`, `src/lyrics/parser.rs`, `src/lyrics/netease.rs`, `src/lyrics/lrclib.rs`
+- Contains: `LyricsManager`, `LyricsProvider` trait, `Lyrics`, `LyricLine`, `parse_lrc()`, and two online provider implementations
+- Depends on: `player` (Track struct), `reqwest` (HTTP for Netease/LRCLIB)
 - Used by: `ui` module (via `Arc<LyricsManager>`)
 
 **Artwork System (`artwork`):**
@@ -85,9 +85,9 @@
 **Lyrics Fetching (`src/lyrics/mod.rs`):**
 
 1. `LyricsManager::get_lyrics()` checks `Arc<Mutex<LruCache>>` first
-2. Iterates providers sorted by `priority()` (lower = higher priority): LocalProvider(1) -> LrclibProvider(5) -> NeteaseProvider(10)
-3. Each provider gets 5-second `tokio::time::timeout`
-4. First successful result with non-empty lines is cached and returned
+2. Before calibration, races LRCLIB and Netease concurrently and returns the first provider that yields lyrics
+3. When a clear winner is observed, stores it as the session primary and tries it first on later tracks, with fallback to the other provider
+4. Successful hits are cached; transient provider failures and misses are not cached as permanent misses
 
 **Artwork Pipeline (`src/artwork/mod.rs`, `src/artwork/cache.rs`):**
 
@@ -122,7 +122,7 @@
 **LyricsProvider Trait:**
 - Purpose: Abstract over different lyrics data sources
 - Definition: `src/lyrics/provider.rs`
-- Implementations: `LocalProvider` (`src/lyrics/local.rs`), `LrclibProvider` (`src/lyrics/lrclib.rs`), `NeteaseProvider` (`src/lyrics/netease.rs`)
+- Implementations: `LrclibProvider` (`src/lyrics/lrclib.rs`), `NeteaseProvider` (`src/lyrics/netease.rs`). The local file provider was removed in v0.3.0.
 - Pattern: `#[async_trait]` with `Box<dyn LyricsProvider>` stored in `Vec` inside `LyricsManager`, wrapped in `Arc` for sharing across tasks
 - Priority system: `fn priority(&self) -> u8` determines query order (lower first)
 
@@ -142,7 +142,7 @@
 **App Construction (`App::new()`):**
 - Location: `src/ui/mod.rs` line 151
 - Triggers: Called once from `main()`
-- Responsibilities: Load config from TOML, create `AppleMusicController`, set up `ArtworkManager` with cache directory, initialize `LyricsManager` with all three providers, create `SettingsMenu`
+- Responsibilities: Load config from TOML, create `AppleMusicController`, set up `ArtworkManager` with cache directory, initialize `LyricsManager` with LRCLIB and Netease providers, create `SettingsMenu`
 
 **State Update (`App::update()`):**
 - Location: `src/ui/mod.rs` line 391

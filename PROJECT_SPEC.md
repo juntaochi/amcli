@@ -355,7 +355,7 @@ impl Lyrics {
 ### Phase 3: Lyrics Integration (Week 5-6) ✅ 已完成
 
 - [x] LRC 解析器（支持多时间戳、偏移量）
-- [x] 歌词 API 集成（本地文件、Netease、LRCLIB）
+- [x] 歌词 API 集成（LRCLIB、Netease；本地文件 Provider 已移除）
 - [x] 实时同步显示（毫秒级精度，自动滚动）
 - [x] **多语言 UI 支持**（English / Japanese）
 - [x] **设置菜单**（语言/主题/马赛克切换）

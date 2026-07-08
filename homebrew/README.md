@@ -22,12 +22,13 @@ This directory contains the Homebrew formula template for AMCLI.
 3. **Update SHA256 hashes** after creating a release:
    ```bash
    # Download the release tarballs
-   curl -LO https://github.com/juntaochi/amcli/releases/download/v0.1.0/amcli-v0.1.0-arm64-apple-darwin.tar.gz
-   curl -LO https://github.com/juntaochi/amcli/releases/download/v0.1.0/amcli-v0.1.0-x86_64-apple-darwin.tar.gz
+   VERSION="v0.3.0"  # update to the release tag you are packaging
+   curl -LO "https://github.com/juntaochi/amcli/releases/download/${VERSION}/amcli-${VERSION}-arm64-apple-darwin.tar.gz"
+   curl -LO "https://github.com/juntaochi/amcli/releases/download/${VERSION}/amcli-${VERSION}-x86_64-apple-darwin.tar.gz"
 
    # Calculate SHA256
-   shasum -a 256 amcli-v0.1.0-arm64-apple-darwin.tar.gz
-   shasum -a 256 amcli-v0.1.0-x86_64-apple-darwin.tar.gz
+   shasum -a 256 "amcli-${VERSION}-arm64-apple-darwin.tar.gz"
+   shasum -a 256 "amcli-${VERSION}-x86_64-apple-darwin.tar.gz"
 
    # Update the formula with the actual SHA256 values
    ```
@@ -35,7 +36,7 @@ This directory contains the Homebrew formula template for AMCLI.
 4. **Commit and push**:
    ```bash
    git add Formula/amcli.rb
-   git commit -m "Add amcli v0.1.0"
+   git commit -m "Update amcli ${VERSION}"
    git push
    ```
 

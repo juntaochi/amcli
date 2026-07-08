@@ -20,9 +20,9 @@
 ### Visual Polish
 
 - [x] **VISL-01**: Consistent spacing system with unified constants replacing ad-hoc padding values
-- [ ] **VISL-02**: Song info area (title, artist, album) labels and values cleanly aligned
-- [ ] **VISL-03**: Current lyrics line highlighted with stronger visual contrast
-- [ ] **VISL-04**: Lyrics lines dim gradually with distance from current line (graduated dimming)
+- [x] **VISL-02**: Song info area (title, artist, album) labels and values cleanly aligned
+- [x] **VISL-03**: Current lyrics line highlighted with stronger visual contrast
+- [x] **VISL-04**: Lyrics lines dim gradually with distance from current line (graduated dimming)
 
 ## v2 Requirements
 
@@ -52,9 +52,9 @@
 | LAYT-03 | Phase 2 | Complete |
 | LAYT-04 | Phase 2 | Complete |
 | VISL-01 | Phase 2 | Complete |
-| VISL-02 | Phase 3 | Pending |
-| VISL-03 | Phase 3 | Pending |
-| VISL-04 | Phase 3 | Pending |
+| VISL-02 | Phase 3 | Complete (automated; visual verification pending) |
+| VISL-03 | Phase 3 | Complete (automated; visual verification pending) |
+| VISL-04 | Phase 3 | Complete (automated; visual verification pending) |
 
 **Coverage:**
 - v1 requirements: 10 total
@@ -63,4 +63,4 @@
 
 ---
 *Requirements defined: 2026-03-26*
-*Last updated: 2026-03-26 after roadmap creation*
+*Last updated: 2026-07-08 after docs/planning drift cleanup*

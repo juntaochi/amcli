@@ -71,7 +71,7 @@ GET https://itunes.apple.com/search?term={artist}+{track_name}&entity=song&limit
 
 **Implementation:** `src/lyrics/lrclib.rs`
 
-**Provider Priority:** 5 (second, after local files at priority 1)
+**Provider Priority:** 5 (higher than Netease; local file provider removed in v0.3.0)
 
 **Endpoints:**
 ```
@@ -96,7 +96,7 @@ GET https://lrclib.net/api/get?artist_name={}&track_name={}
 
 **Implementation:** `src/lyrics/netease.rs`
 
-**Provider Priority:** 10 (third, lowest priority)
+**Provider Priority:** 10 (fallback/lower priority than LRCLIB)
 
 **Endpoints:**
 ```
@@ -129,24 +129,20 @@ pub trait LyricsProvider: Send + Sync {
 }
 ```
 
-**Priority Order:**
-1. `LocalProvider` (priority 1) - `src/lyrics/local.rs`
-2. `LrclibProvider` (priority 5) - `src/lyrics/lrclib.rs`
-3. `NeteaseProvider` (priority 10) - `src/lyrics/netease.rs`
+**Provider Order:**
+1. `LrclibProvider` (priority 5) - `src/lyrics/lrclib.rs`
+2. `NeteaseProvider` (priority 10) - `src/lyrics/netease.rs`
 
 **Orchestration:** `LyricsManager` in `src/lyrics/mod.rs`:
-- Sorts providers by priority, queries sequentially
-- 5-second timeout per provider (`tokio::time::timeout`)
-- LRU cache (configurable capacity) keyed by `"{artist}|{track_name}"`
-- Caches both hits (`Some(lyrics)`) and misses (`None`)
-- Skips providers that return empty lyrics
+- Before calibration, races online providers concurrently and returns the first lyrics hit
+- Stores a clear winner as the session primary, then tries primary-first with fallback
+- Uses a 12-second provider timeout (`PROVIDER_TIMEOUT`)
+- LRU cache (capacity 20 in default app setup) keyed by version-aware track metadata
+- Caches successful hits only; provider errors and misses are not cached as permanent misses
+- Distinguishes reachable no-match from all-providers-unreachable so UI can show no lyrics vs no signal
 
 **Local Lyrics Provider:**
-- Reads `.lrc` files from a configurable lyrics directory
-- Filename patterns tried in order:
-  1. `{artist} - {name}.lrc`
-  2. `{name}.lrc`
-  3. `{name} - {artist}.lrc`
+- Removed in v0.3.0. Reintroducing local LRC support would require a new provider implementation and explicit registration.
 
 ### LRC Parser
 
@@ -192,7 +188,6 @@ pub trait LyricsProvider: Send + Sync {
 **File Storage:**
 - User config: `~/.config/amcli/config.toml` (via `dirs::config_dir()`)
 - Artwork disk cache: `{cache_dir}/{sha256_hash}.png` (implemented in `src/artwork/cache.rs` but `insert_async`/`get_async` are currently `#[allow(dead_code)]` -- disk cache not actively used)
-- Local lyrics: User-specified directory with `.lrc` files
 
 **Caching (all in-memory LRU):**
 - Artwork URL cache: 20 entries on `AppleMusicController` (`src/player/apple_music.rs`)

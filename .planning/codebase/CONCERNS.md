@@ -132,10 +132,10 @@
 - Risk: The `:::BOLT_SPLIT:::` parsing and 7-field extraction could silently break. This is the single hottest code path in the application.
 - Priority: High -- add a mock test that verifies correct parsing of the combined output format.
 
-**No tests for lyrics providers (Netease, LRCLIB, Local):**
-- What's not tested: None of the three lyrics provider implementations have any unit tests. Only the LRC parser (`src/lyrics/parser.rs`) is tested.
-- Files: `src/lyrics/lrclib.rs`, `src/lyrics/netease.rs`, `src/lyrics/local.rs`
-- Risk: API response format changes from LRCLIB or Netease would go undetected. Local file pattern matching (`Artist - Track.lrc` vs `Track - Artist.lrc`) is untested.
+**No tests for lyrics providers (Netease, LRCLIB):**
+- What's not tested: The online lyrics provider implementations need direct unit coverage for API parsing/matching behavior. The LRC parser and some matching/orchestration behavior have tests.
+- Files: `src/lyrics/lrclib.rs`, `src/lyrics/netease.rs`
+- Risk: API response format changes from LRCLIB or Netease could go undetected without provider-level fixtures.
 - Priority: Medium -- at minimum, test the response parsing with fixture JSON/LRC data.
 
 **No tests for `LyricsManager` orchestration:**

@@ -2,7 +2,7 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
+status: Automated implementation complete; human visual verification pending
 stopped_at: "Checkpoint: 03-02 Task 3 human-verify (Tasks 1-2 committed)"
 last_updated: "2026-03-26T15:58:50.533Z"
 progress:
@@ -19,12 +19,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** The TUI looks polished and adapts gracefully to any terminal size
-**Current focus:** Phase 03 — section-level-polish
+**Current focus:** v0.3.x docs/release alignment after Phase 03 automated completion
 
 ## Current Position
 
-Phase: 03 (section-level-polish) — EXECUTING
-Plan: 2 of 2
+Phase 03 automated implementation is complete (Plans 1-2). Remaining checkpoint: human visual verification of the section-level polish.
 
 ## Performance Metrics
 
@@ -75,7 +74,7 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None yet.
+- Human visual verification of Phase 03 section-level polish remains pending before treating the UI polish milestone as fully product-accepted.
 
 ### Blockers/Concerns
 

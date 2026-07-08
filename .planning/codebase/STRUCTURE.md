@@ -19,7 +19,6 @@ amcli/
 │   │   ├── mod.rs              # Lyrics, LyricLine, LyricsManager (orchestrator with LRU cache)
 │   │   ├── provider.rs         # LyricsProvider trait definition
 │   │   ├── parser.rs           # LRC format parser (parse_lrc)
-│   │   ├── local.rs            # LocalProvider - reads .lrc files from ~/Music/Lyrics/
 │   │   ├── lrclib.rs           # LrclibProvider - LRCLIB.net API client
 │   │   └── netease.rs          # NeteaseProvider - Netease Cloud Music API client
 │   ├── artwork/                # Album artwork pipeline
@@ -72,7 +71,7 @@ amcli/
 
 **`src/lyrics/`:**
 - Purpose: Lyrics fetching, caching, and LRC parsing
-- Contains: Manager/orchestrator, trait definition, parser, three provider implementations
+- Contains: Manager/orchestrator, trait definition, parser, and two online provider implementations
 - Key files: `mod.rs` (LyricsManager), `provider.rs` (trait), `parser.rs` (LRC parser with tests)
 
 **`src/artwork/`:**
@@ -134,7 +133,6 @@ crate (src/main.rs)
 ├── mod config            (private module)
 │   └── pub types: Config, ArtworkConfig, UIConfig, GeneralConfig, Language
 ├── mod lyrics            (private module)
-│   ├── pub mod local     (pub within crate)
 │   ├── pub mod lrclib    (pub within crate)
 │   ├── pub mod netease   (pub within crate)
 │   ├── pub mod parser    (pub within crate)
@@ -165,9 +163,8 @@ All top-level modules are declared `mod` (private) in `main.rs`. Sub-modules use
 | `CommandRunner` | `src/player/apple_music.rs:12` | Trait for subprocess execution (mockable) |
 | `Lyrics` | `src/lyrics/mod.rs:22` | Parsed lyrics with lines, metadata, offset |
 | `LyricLine` | `src/lyrics/mod.rs:16` | Single lyric line with text and timestamp |
-| `LyricsManager` | `src/lyrics/mod.rs:51` | Orchestrator: cache check, provider iteration |
+| `LyricsManager` | `src/lyrics/mod.rs:51` | Orchestrator: cache check, provider racing/calibration |
 | `LyricsProvider` | `src/lyrics/provider.rs:8` | Async trait for lyrics data sources |
-| `LocalProvider` | `src/lyrics/local.rs:9` | Reads .lrc files from local filesystem |
 | `LrclibProvider` | `src/lyrics/lrclib.rs:13` | LRCLIB.net API client |
 | `NeteaseProvider` | `src/lyrics/netease.rs:10` | Netease Cloud Music API client |
 | `ArtworkManager` | `src/artwork/mod.rs:10` | Downloads and processes album artwork |
@@ -181,7 +178,7 @@ All top-level modules are declared `mod` (private) in `main.rs`. Sub-modules use
 **Files:**
 - Module roots: `mod.rs` in each directory
 - Implementations named after the concept: `apple_music.rs`, `settings.rs`, `cache.rs`, `converter.rs`, `parser.rs`, `provider.rs`
-- Provider implementations: named after the service (`local.rs`, `netease.rs`, `lrclib.rs`)
+- Provider implementations: named after the service (`netease.rs`, `lrclib.rs`). The local lyrics provider was removed in v0.3.0.
 - All lowercase with underscores (snake_case)
 
 **Directories:**
