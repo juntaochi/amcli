@@ -18,7 +18,7 @@ use crate::artwork::ArtworkManager;
 use crate::lyrics::{lrclib::LrclibProvider, netease::NeteaseProvider, Lyrics, LyricsManager};
 use crate::player::{apple_music::AppleMusicController, MediaPlayer, RepeatMode, Track};
 use ratatui_image::protocol::StatefulProtocol;
-use ratatui_image::StatefulImage;
+use ratatui_image::{Resize, StatefulImage};
 use throbber_widgets_tui::{Throbber, ThrobberState, WhichUse, BRAILLE_SIX_DOUBLE};
 
 // Settings module
@@ -260,6 +260,7 @@ impl App {
         self.current_theme_index = (self.current_theme_index + 1) % THEMES.len();
         self.current_artwork_url = None;
         self.artwork_protocol = None;
+        self.needs_full_repaint = true;
         self.update().await?;
         Ok(())
     }
@@ -269,11 +270,15 @@ impl App {
     }
 
     pub async fn next_track(&mut self) -> Result<()> {
-        self.player.next().await
+        self.player.next().await?;
+        self.clear_artwork_for_track_transition(true);
+        Ok(())
     }
 
     pub async fn previous_track(&mut self) -> Result<()> {
-        self.player.previous().await
+        self.player.previous().await?;
+        self.clear_artwork_for_track_transition(true);
+        Ok(())
     }
 
     pub async fn volume_up(&mut self) -> Result<()> {
@@ -357,6 +362,16 @@ impl App {
         std::mem::take(&mut self.needs_full_repaint)
     }
 
+    fn clear_artwork_for_track_transition(&mut self, show_loading: bool) {
+        self.current_artwork_url = None;
+        self.artwork_protocol = None;
+        self.is_loading_artwork = show_loading && self.config.artwork.album;
+        if let Some(task) = self.artwork_task.take() {
+            task.abort();
+        }
+        self.needs_full_repaint = true;
+    }
+
     pub fn settings_navigate_up(&mut self) {
         self.settings_menu.navigate_up();
     }
@@ -385,6 +400,7 @@ impl App {
                     self.settings_menu.update_theme(new_index);
                     self.current_artwork_url = None;
                     self.artwork_protocol = None;
+                    self.needs_full_repaint = true;
                     self.config.ui.color_theme = THEMES[new_index].name.to_lowercase();
                     self.config.save().await?;
                 }
@@ -394,6 +410,7 @@ impl App {
                     self.settings_menu.update_album(new_enabled);
                     self.current_artwork_url = None;
                     self.artwork_protocol = None;
+                    self.needs_full_repaint = true;
                     self.config.save().await?;
                 }
                 SettingsItem::Mosaic { enabled } => {
@@ -402,6 +419,7 @@ impl App {
                     self.settings_menu.update_mosaic(new_enabled);
                     self.current_artwork_url = None;
                     self.artwork_protocol = None;
+                    self.needs_full_repaint = true;
                     self.config.save().await?;
                 }
                 SettingsItem::Close => {
@@ -481,6 +499,7 @@ impl App {
         );
 
         if track_changed {
+            self.clear_artwork_for_track_transition(new_track.is_some() && artwork_url.is_some());
             self.current_lyrics = None;
             self.lyrics_unreachable = false;
             if let Some(task) = self.lyrics_task.take() {
@@ -552,6 +571,8 @@ impl App {
             self.current_artwork_url = artwork_url.clone();
             if let Some(url) = artwork_url {
                 self.is_loading_artwork = true;
+                self.artwork_protocol = None;
+                self.needs_full_repaint = true;
                 let manager = self.artwork_manager.clone();
                 let theme = self.current_theme();
                 let config = self.config.clone();
@@ -604,16 +625,19 @@ impl App {
                         Ok(Ok(img)) => {
                             self.artwork_protocol =
                                 Some(self.artwork_converter.create_protocol(img));
+                            self.needs_full_repaint = true;
                         }
                         Ok(Err(e)) => {
                             tracing::debug!("Artwork load failed: {}", e);
                             self.current_artwork_url = None;
                             self.artwork_protocol = None;
+                            self.needs_full_repaint = true;
                         }
                         Err(e) => {
                             tracing::warn!("Artwork task panicked: {}", e);
                             self.current_artwork_url = None;
                             self.artwork_protocol = None;
+                            self.needs_full_repaint = true;
                         }
                     }
                 }
@@ -832,6 +856,32 @@ fn draw_progress(f: &mut Frame, area: Rect, track: &Track, theme: Theme) {
     f.render_widget(gauge, area);
 }
 
+fn inset_rect(area: Rect, margin: u16) -> Rect {
+    Rect::new(
+        area.x.saturating_add(margin),
+        area.y.saturating_add(margin),
+        area.width.saturating_sub(margin.saturating_mul(2)),
+        area.height.saturating_sub(margin.saturating_mul(2)),
+    )
+}
+
+fn center_rect(area: Rect, width: u16, height: u16) -> Rect {
+    let width = width.min(area.width);
+    let height = height.min(area.height);
+
+    Rect::new(
+        area.x + area.width.saturating_sub(width) / 2,
+        area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    )
+}
+
+fn artwork_protocol_rect(bounds: Rect, protocol: &StatefulProtocol) -> Rect {
+    let fit = protocol.size_for(Resize::Fit(None), bounds);
+    center_rect(bounds, fit.width, fit.height)
+}
+
 fn draw_artwork(
     f: &mut Frame,
     area: Rect,
@@ -841,21 +891,18 @@ fn draw_artwork(
     theme: Theme,
     is_jp: bool,
 ) {
-    // Size artwork to fit area with margin for centering (2:1 terminal char aspect ratio)
-    let max_w = area.width.saturating_sub(2); // 1 cell margin each side
-    let max_h = area.height.saturating_sub(2).saturating_mul(2); // 1 row margin top/bottom
-    let side = max_w.min(max_h);
-    let char_height = side / 2;
-    let art_rect = area.centered(Constraint::Length(side), Constraint::Length(char_height));
+    let art_bounds = inset_rect(area, 1);
 
     if is_loading {
+        let art_rect = center_rect(art_bounds, 1, 1);
         let loader = Throbber::default()
             .throbber_set(BRAILLE_SIX_DOUBLE)
             .use_type(WhichUse::Spin)
             .style(Style::default().fg(theme.accent));
         f.render_stateful_widget(loader, art_rect, throbber_state);
     } else if let Some(protocol) = protocol {
-        let image = StatefulImage::default();
+        let art_rect = artwork_protocol_rect(art_bounds, protocol);
+        let image = StatefulImage::default().resize(Resize::Fit(None));
         f.render_stateful_widget(image, art_rect, protocol);
     } else {
         let no_sig_text = if is_jp { "信号なし" } else { "NO SIGNAL" };
@@ -870,7 +917,7 @@ fn draw_artwork(
                 Constraint::Length(1),
                 Constraint::Min(0),
             ])
-            .split(art_rect);
+            .split(art_bounds);
         f.render_widget(no_sig, v_center[1]);
     }
 }
@@ -1022,9 +1069,9 @@ fn draw_metadata(
 fn draw_controls(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) {
     let controls = if is_jp {
         vec![
-            ("▶再生", "SPC"),
-            ("▶▶次", "]"),
-            ("◀◀前", "["),
+            ("▶ 再生", "SPC"),
+            ("▶▶ 次", "]"),
+            ("◀◀ 前", "["),
             ("音量＋", "+"),
             ("音量－", "-"),
             ("テーマ", "t"),
@@ -1247,12 +1294,14 @@ mod tests {
     use super::*;
     use crate::player::{MediaPlayer, PlaybackState, RepeatMode, Track};
     use async_trait::async_trait;
+    use image::{Rgba, RgbaImage};
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
 
     struct MockPlayer {
         volume: u8,
         artwork_url: Option<String>,
+        track: Track,
     }
 
     #[async_trait]
@@ -1276,26 +1325,14 @@ mod tests {
             Ok(())
         }
         async fn get_current_track(&self) -> Result<Option<Track>> {
-            Ok(Some(Track {
-                name: "Test Song".into(),
-                artist: "Test Artist".into(),
-                album: "Test Album".into(),
-                duration: Duration::from_secs(300),
-                position: Duration::from_secs(150),
-            }))
+            Ok(Some(self.track.clone()))
         }
         async fn get_playback_state(&self) -> Result<PlaybackState> {
             Ok(PlaybackState::Playing)
         }
         async fn get_player_status(&self) -> Result<crate::player::PlayerStatus> {
             Ok(crate::player::PlayerStatus {
-                track: Some(Track {
-                    name: "Test Song".into(),
-                    artist: "Test Artist".into(),
-                    album: "Test Album".into(),
-                    duration: Duration::from_secs(300),
-                    position: Duration::from_secs(150),
-                }),
+                track: Some(self.track.clone()),
                 volume: Some(self.volume),
                 state: PlaybackState::Playing,
             })
@@ -1320,10 +1357,21 @@ mod tests {
         }
     }
 
+    fn test_track(name: &str) -> Track {
+        Track {
+            name: name.into(),
+            artist: "Test Artist".into(),
+            album: "Test Album".into(),
+            duration: Duration::from_secs(300),
+            position: Duration::from_secs(150),
+        }
+    }
+
     fn mock_player(volume: u8) -> Box<dyn MediaPlayer> {
         Box::new(MockPlayer {
             volume,
             artwork_url: Some("http://example.com/artwork.jpg".into()),
+            track: test_track("Test Song"),
         })
     }
 
@@ -1378,6 +1426,49 @@ mod tests {
         assert!(!app.take_needs_full_repaint());
     }
 
+    #[tokio::test]
+    async fn next_track_clears_artwork_immediately() {
+        let player = mock_player(70);
+        let mut app = test_app(player).await;
+        let img = DynamicImage::ImageRgba8(RgbaImage::from_pixel(2, 2, Rgba([255, 255, 255, 255])));
+
+        app.current_artwork_url = Some("old-artwork".into());
+        app.artwork_protocol = Some(app.artwork_converter.create_protocol(img));
+
+        app.next_track().await.unwrap();
+
+        assert!(app.current_artwork_url.is_none());
+        assert!(app.artwork_protocol.is_none());
+        assert!(app.is_loading_artwork);
+        assert!(app.take_needs_full_repaint());
+    }
+
+    #[tokio::test]
+    async fn track_change_clears_stale_artwork_even_without_url_change() {
+        let player = Box::new(MockPlayer {
+            volume: 70,
+            artwork_url: None,
+            track: test_track("New Song"),
+        });
+        let mut app = test_app(player).await;
+        let img = DynamicImage::ImageRgba8(RgbaImage::from_pixel(2, 2, Rgba([255, 255, 255, 255])));
+
+        app.current_track = Some(test_track("Old Song"));
+        app.current_artwork_url = None;
+        app.artwork_protocol = Some(app.artwork_converter.create_protocol(img));
+
+        app.update().await.unwrap();
+
+        assert_eq!(
+            app.current_track.as_ref().map(|track| track.name.as_str()),
+            Some("New Song")
+        );
+        assert!(app.current_artwork_url.is_none());
+        assert!(app.artwork_protocol.is_none());
+        assert!(!app.is_loading_artwork);
+        assert!(app.take_needs_full_repaint());
+    }
+
     #[test]
     fn track_identity_change_includes_album_and_duration_versions() {
         let current = Track {
@@ -1402,11 +1493,13 @@ mod tests {
         let player = Box::new(MockPlayer {
             volume: 70,
             artwork_url: Some(missing_url.into()),
+            track: test_track("Test Song"),
         });
         let mut app = test_app(player).await;
 
         app.update().await.unwrap();
         assert_eq!(app.current_artwork_url.as_deref(), Some(missing_url));
+        assert!(app.take_needs_full_repaint());
 
         for _ in 0..10 {
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -1418,6 +1511,20 @@ mod tests {
 
         assert!(app.current_artwork_url.is_none());
         assert!(app.artwork_protocol.is_none());
+        assert!(app.take_needs_full_repaint());
+    }
+
+    #[test]
+    fn artwork_protocol_rect_uses_protocol_fit_size_before_centering() {
+        let mut converter = ArtworkConverter::with_mode("halfblocks").unwrap();
+        let img =
+            DynamicImage::ImageRgba8(RgbaImage::from_pixel(600, 600, Rgba([255, 255, 255, 255])));
+        let protocol = converter.create_protocol(img);
+        let bounds = Rect::new(1, 1, 38, 18);
+
+        let rect = artwork_protocol_rect(bounds, &protocol);
+
+        assert_eq!(rect, Rect::new(2, 1, 36, 18));
     }
 
     #[test]
