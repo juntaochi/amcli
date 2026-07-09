@@ -529,17 +529,16 @@ impl App {
             } else {
                 0
             };
+            let pos_secs = track.position.as_secs();
+            let dur_secs = track.duration.as_secs();
             cache.duration_str = format!(
-                "{} / {}",
-                format_duration(track.position),
-                format_duration(track.duration)
+                "{:02}:{:02} / {:02}:{:02}",
+                pos_secs / 60,
+                pos_secs % 60,
+                dur_secs / 60,
+                dur_secs % 60
             );
-            cache.gauge_label = format!(
-                " {}/{} | {:02}% ",
-                format_duration_seconds(track.position),
-                format_duration_seconds(track.duration),
-                progress_percent
-            );
+            cache.gauge_label = format!(" {}s/{}s | {:02}% ", pos_secs, dur_secs, progress_percent);
             cache.progress_percent = progress_percent;
             self.metadata_cache = Some(cache);
         } else {
@@ -803,12 +802,9 @@ fn draw_progress(f: &mut Frame, area: Rect, track: &Track, theme: Theme) {
         0
     };
 
-    let label = format!(
-        " {}/{} | {:02}% ",
-        format_duration_seconds(track.position),
-        format_duration_seconds(track.duration),
-        progress_percent
-    );
+    let pos_secs = track.position.as_secs();
+    let dur_secs = track.duration.as_secs();
+    let label = format!(" {}s/{}s | {:02}% ", pos_secs, dur_secs, progress_percent);
 
     let gauge = Gauge::default()
         .block(
@@ -918,11 +914,17 @@ fn draw_metadata(
         track.name.to_uppercase(),
         track.artist.to_uppercase(),
         track.album.to_uppercase(),
-        format!(
-            "{} / {}",
-            format_duration(track.position),
-            format_duration(track.duration)
-        ),
+        {
+            let pos_secs = track.position.as_secs();
+            let dur_secs = track.duration.as_secs();
+            format!(
+                "{:02}:{:02} / {:02}:{:02}",
+                pos_secs / 60,
+                pos_secs % 60,
+                dur_secs / 60,
+                dur_secs % 60
+            )
+        },
     ];
 
     let _available_height = area.height as usize;
@@ -1192,18 +1194,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if app.settings_menu.is_open {
         app.settings_menu.render(f, theme);
     }
-}
-
-fn format_duration_seconds(duration: Duration) -> String {
-    let total_seconds = duration.as_secs();
-    format!("{}s", total_seconds)
-}
-
-fn format_duration(duration: Duration) -> String {
-    let total_seconds = duration.as_secs();
-    let minutes = total_seconds / 60;
-    let seconds = total_seconds % 60;
-    format!("{:02}:{:02}", minutes, seconds)
 }
 
 // Marquee scroll measured by display width (columns), so full-width CJK glyphs
