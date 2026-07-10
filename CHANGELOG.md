@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Release repository context** — Pass the repository explicitly when publishing from an artifact-only job so GitHub CLI does not require a checked-out worktree.
+
+### Changed
+- **GitHub Actions runtime** — Update checkout steps to the current Node 24-based action release.
+- **Homebrew template** — Point the formula template at the published `v0.3.1` artifacts and their verified SHA256 digests.
+
 ## [0.3.1] - 2026-07-10
 
 ### Fixed

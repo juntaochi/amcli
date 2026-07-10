@@ -1,22 +1,25 @@
+# typed: strict
+# frozen_string_literal: true
+
 # AMCLI Homebrew Formula
 # This is a template - actual formula will be in homebrew-tap repository
 class Amcli < Formula
-  desc "Apple Music Command Line Interface - A powerful TUI for controlling Apple Music"
+  desc "Apple Music Command-line Interface - A powerful TUI for controlling Apple Music"
   homepage "https://github.com/juntaochi/amcli"
-  version "0.2.2"
+  version "0.3.1"
   license "MIT"
+
+  depends_on :macos
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/juntaochi/amcli/releases/download/v0.2.2/amcli-v0.2.2-arm64-apple-darwin.tar.gz"
-      sha256 "REPLACE_WITH_ARM64_SHA256"
+      url "https://github.com/juntaochi/amcli/releases/download/v0.3.1/amcli-v0.3.1-arm64-apple-darwin.tar.gz"
+      sha256 "92a8c3ca4d7d445a86827cded0a8d46c8b39d565ac5f24aea065a4b218abaea2"
     else
-      url "https://github.com/juntaochi/amcli/releases/download/v0.2.2/amcli-v0.2.2-x86_64-apple-darwin.tar.gz"
-      sha256 "REPLACE_WITH_X86_64_SHA256"
+      url "https://github.com/juntaochi/amcli/releases/download/v0.3.1/amcli-v0.3.1-x86_64-apple-darwin.tar.gz"
+      sha256 "e7ef1f1a5543a619aebed93b8669b4b194397651df4d91a4ee48787439ae3f38"
     end
   end
-
-  depends_on :macos
 
   def install
     bin.install "amcli"
