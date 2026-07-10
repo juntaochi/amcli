@@ -764,12 +764,14 @@ fn draw_chassis(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) -> Rect {
         f.render_widget(chassis_block, area);
 
         for y in (inner.top()..inner.bottom()).step_by(2) {
-            let line = Paragraph::new(" ".repeat(inner.width as usize)).style(
+            // OPTIMIZATION (Bolt): Use `Block::default()` instead of `Paragraph::new(" ".repeat(...))`
+            // to fill the background color. This completely eliminates a string heap allocation per scanline.
+            let scanline = Block::default().style(
                 Style::default()
                     .bg(Color::Rgb(5, 5, 5))
                     .add_modifier(Modifier::DIM),
             );
-            f.render_widget(line, Rect::new(inner.left(), y, inner.width, 1));
+            f.render_widget(scanline, Rect::new(inner.left(), y, inner.width, 1));
         }
         inner
     } else {
