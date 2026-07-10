@@ -16,8 +16,8 @@ This document provides a step-by-step guide for releasing AMCLI.
 
 ### 2. Version Management / 版本管理
 
-- [ ] Update version in `Cargo.toml`
-- [ ] Update version in `homebrew/amcli.rb` template
+- [ ] Update version in `Cargo.toml` and regenerate `Cargo.lock`
+- [ ] Update `homebrew/amcli.rb` after release assets and checksums are available
 - [ ] Create/update `CHANGELOG.md` with release notes
 - [ ] Ensure all documentation references correct version
 
@@ -41,7 +41,7 @@ This document provides a step-by-step guide for releasing AMCLI.
 
 ```bash
 # Set the version (without 'v' prefix)
-VERSION="0.3.0"  # update to the intended Cargo.toml version
+VERSION="0.3.1"  # update to the intended Cargo.toml version
 
 # Create annotated tag
 git tag -a "v${VERSION}" -m "Release version ${VERSION}"
@@ -111,7 +111,7 @@ This will automatically trigger the GitHub Actions release workflow which will:
 1. Download the release artifacts:
    ```bash
    cd /tmp
-   VERSION="0.3.0"  # update to the intended Cargo.toml version
+   VERSION="0.3.1"  # update to the intended Cargo.toml version
 
    curl -LO "https://github.com/juntaochi/amcli/releases/download/v${VERSION}/amcli-v${VERSION}-arm64-apple-darwin.tar.gz"
    curl -LO "https://github.com/juntaochi/amcli/releases/download/v${VERSION}/amcli-v${VERSION}-x86_64-apple-darwin.tar.gz"

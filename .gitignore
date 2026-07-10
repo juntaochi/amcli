@@ -23,7 +23,6 @@ Temporary Items
 
 # Rust
 /target/
-Cargo.lock
 
 # Binaries & Build Artifacts
 /bin/
@@ -68,4 +67,7 @@ test_gamma.sh
 /.brv/
 /.sisyphus/
 /.jules/
+/.autopm/
+/.codegraph/
+/.cursor/
 TWITTER_ANNOUNCEMENT.md

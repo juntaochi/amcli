@@ -4,68 +4,58 @@ on:
   push:
     tags:
       - 'v*.*.*'
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to release'
-        required: true
-        type: string
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
 jobs:
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-      version: ${{ steps.get_version.outputs.version }}
+  verify:
+    name: Verify release
+    runs-on: macos-14
     steps:
-      - name: Get version from tag
-        id: get_version
+      - name: Checkout release tag
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Validate tag and package version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ inputs.tag }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          set -euo pipefail
+
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release tag must use vMAJOR.MINOR.PATCH format"
+            exit 1
           fi
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.get_version.outputs.version }}
-          release_name: AMCLI ${{ steps.get_version.outputs.version }}
-          draft: false
-          prerelease: false
-          body: |
-            ## AMCLI Release ${{ steps.get_version.outputs.version }}
+          package_version=$(cargo metadata --no-deps --format-version 1 | \
+            jq -r '.packages[] | select(.name == "amcli") | .version')
 
-            ### Installation
+          if [[ "v${package_version}" != "$RELEASE_TAG" ]]; then
+            echo "::error::Tag ${RELEASE_TAG} does not match Cargo.toml version ${package_version}"
+            exit 1
+          fi
 
-            **macOS (Homebrew):**
-            ```bash
-            brew tap juntaochi/tap
-            brew install amcli
-            ```
-
-            **From Binary:**
-            Download the appropriate binary for your system below.
-
-            ### What's New
-            See [CHANGELOG.md](https://github.com/juntaochi/amcli/blob/main/CHANGELOG.md) for details.
+      - name: Run project verification
+        run: make verify
 
   build-macos:
-    name: Build macOS
-    needs: create-release
+    name: Build ${{ matrix.target }}
+    needs: verify
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: x86_64-apple-darwin
@@ -76,8 +66,8 @@ jobs:
             arch: arm64
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout release tag
+        uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -85,42 +75,65 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --locked --release --target ${{ matrix.target }}
 
-      - name: Create archive
+      - name: Package release asset
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_ARCH: ${{ matrix.arch }}
+          RELEASE_TARGET: ${{ matrix.target }}
         run: |
-          cd target/${{ matrix.target }}/release
-          tar czf amcli-${{ needs.create-release.outputs.version }}-${{ matrix.arch }}-apple-darwin.tar.gz amcli
-          shasum -a 256 amcli-${{ needs.create-release.outputs.version }}-${{ matrix.arch }}-apple-darwin.tar.gz > amcli-${{ needs.create-release.outputs.version }}-${{ matrix.arch }}-apple-darwin.tar.gz.sha256
+          set -euo pipefail
 
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          archive="amcli-${RELEASE_TAG}-${RELEASE_ARCH}-apple-darwin.tar.gz"
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          tar -C "target/${RELEASE_TARGET}/release" \
+            -czf "$GITHUB_WORKSPACE/dist/${archive}" amcli
+          cd "$GITHUB_WORKSPACE/dist"
+          shasum -a 256 "$archive" > "${archive}.sha256"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/${{ matrix.target }}/release/amcli-${{ needs.create-release.outputs.version }}-${{ matrix.arch }}-apple-darwin.tar.gz
-          asset_name: amcli-${{ needs.create-release.outputs.version }}-${{ matrix.arch }}-apple-darwin.tar.gz
-          asset_content_type: application/gzip
+          name: release-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Upload SHA256
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/${{ matrix.target }}/release/amcli-${{ needs.create-release.outputs.version }}-${{ matrix.arch }}-apple-darwin.tar.gz.sha256
-          asset_name: amcli-${{ needs.create-release.outputs.version }}-${{ matrix.arch }}-apple-darwin.tar.gz.sha256
-          asset_content_type: text/plain
-
-  update-homebrew-formula:
-    name: Update Homebrew Formula
-    needs: [create-release, build-macos]
+  publish:
+    name: Publish GitHub release
+    needs: build-macos
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Repository Dispatch
-        uses: peter-evans/repository-dispatch@v2
+      - name: Download release artifacts
+        uses: actions/download-artifact@v8
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          event-type: release-published
-          client-payload: '{"version": "${{ needs.create-release.outputs.version }}"}'
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Verify release artifacts
+        run: |
+          set -euo pipefail
+
+          file_count=$(find dist -maxdepth 1 -type f | wc -l | tr -d ' ')
+          if [[ "$file_count" != "4" ]]; then
+            echo "::error::Expected 4 release files, found ${file_count}"
+            find dist -maxdepth 1 -type f -print
+            exit 1
+          fi
+
+          cd dist
+          shasum -a 256 -c ./*.sha256
+
+      - name: Publish release with assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/* \
+            --verify-tag \
+            --generate-notes \
+            --title "AMCLI ${RELEASE_TAG}"

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-10
+
+### Fixed
+- **Artwork track transitions** — Clear stale terminal artwork immediately when changing tracks, cancel obsolete artwork loads, and force full repaints when artwork or display settings change.
+- **Artwork sizing** — Fit and center terminal artwork using the renderer's protocol dimensions so square covers retain their intended proportions.
+
+### Changed
+- **Bilingual documentation** — Split the English and Simplified Chinese READMEs into separate linked files and add current screenshots throughout the feature guide.
+- **Release delivery** — Validate the tag against `Cargo.toml`, build both macOS architectures before publishing, verify checksums, and publish all release assets together.
+
 ## [0.3.0] - 2026-07-03
 
 ### Added
@@ -201,7 +211,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/juntaochi/amcli/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/juntaochi/amcli/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/juntaochi/amcli/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/juntaochi/amcli/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/juntaochi/amcli/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/juntaochi/amcli/compare/v0.2.0...v0.2.1
