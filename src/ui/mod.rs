@@ -764,12 +764,15 @@ fn draw_chassis(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) -> Rect {
         f.render_widget(chassis_block, area);
 
         for y in (inner.top()..inner.bottom()).step_by(2) {
-            let line = Paragraph::new(" ".repeat(inner.width as usize)).style(
+            // Bolt optimization: using Block::default() to paint backgrounds
+            // instead of Paragraph::new(" ".repeat(width)) eliminates expensive
+            // per-scanline string heap allocations during the render loop.
+            let block = Block::default().style(
                 Style::default()
                     .bg(Color::Rgb(5, 5, 5))
                     .add_modifier(Modifier::DIM),
             );
-            f.render_widget(line, Rect::new(inner.left(), y, inner.width, 1));
+            f.render_widget(block, Rect::new(inner.left(), y, inner.width, 1));
         }
         inner
     } else {
