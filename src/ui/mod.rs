@@ -1010,13 +1010,32 @@ fn draw_metadata(
 
                 let display_val = scroll_text(&values[i], col_width, animation_frame);
 
-                lines.push(Line::from(Span::styled(
-                    format!(" {} ", display_val),
-                    Style::default()
-                        .bg(theme.dim)
-                        .fg(theme.bg)
-                        .add_modifier(Modifier::BOLD),
-                )));
+                // OPTIMIZATION: Avoid dynamically formatting strings in the render loop.
+                // By separating the string components into Spans, we bypass heap allocations
+                // per-value every render frame.
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        " ",
+                        Style::default()
+                            .bg(theme.dim)
+                            .fg(theme.bg)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        display_val,
+                        Style::default()
+                            .bg(theme.dim)
+                            .fg(theme.bg)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        " ",
+                        Style::default()
+                            .bg(theme.dim)
+                            .fg(theme.bg)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                ]));
             }
             f.render_widget(
                 Paragraph::new(lines).block(Block::default().padding(
@@ -1046,13 +1065,32 @@ fn draw_metadata(
 
             let display_val = scroll_text(&values[i], col_width, animation_frame);
 
-            lines.push(Line::from(Span::styled(
-                format!(" {} ", display_val),
-                Style::default()
-                    .bg(theme.dim)
-                    .fg(theme.bg)
-                    .add_modifier(Modifier::BOLD),
-            )));
+            // OPTIMIZATION: Avoid dynamically formatting strings in the render loop.
+            // By separating the string components into Spans, we bypass heap allocations
+            // per-value every render frame.
+            lines.push(Line::from(vec![
+                Span::styled(
+                    " ",
+                    Style::default()
+                        .bg(theme.dim)
+                        .fg(theme.bg)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    display_val,
+                    Style::default()
+                        .bg(theme.dim)
+                        .fg(theme.bg)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    " ",
+                    Style::default()
+                        .bg(theme.dim)
+                        .fg(theme.bg)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
         }
         f.render_widget(
             Paragraph::new(lines).block(Block::default().padding(ratatui::widgets::Padding::new(
@@ -1093,14 +1131,25 @@ fn draw_controls(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) {
 
     for (i, (label, key)) in controls.iter().enumerate() {
         if i < btn_layout.len() {
+            // OPTIMIZATION: Construct Spans directly from static string chunks
+            // instead of calling `format!` to allocate heap strings for each
+            // control label every render frame.
             let btn_text = Line::from(vec![
                 Span::styled(
-                    format!(" {}", label),
+                    " ",
                     Style::default()
                         .fg(theme.primary)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(format!(" [{}] ", key), Style::default().fg(theme.dim)),
+                Span::styled(
+                    *label,
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" [", Style::default().fg(theme.dim)),
+                Span::styled(*key, Style::default().fg(theme.dim)),
+                Span::styled("] ", Style::default().fg(theme.dim)),
             ]);
 
             let mut btn_block = Block::default()
