@@ -820,20 +820,10 @@ fn draw_idle(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) {
     f.render_widget(idle_p, area);
 }
 
-fn draw_progress(f: &mut Frame, area: Rect, track: &Track, theme: Theme) {
-    let progress_percent = if track.duration.as_secs() > 0 {
-        ((track.position.as_secs_f64() / track.duration.as_secs_f64()) * 100.0) as u16
-    } else {
-        0
-    };
-
-    let label = format!(
-        " {}/{} | {:02}% ",
-        format_duration_seconds(track.position),
-        format_duration_seconds(track.duration),
-        progress_percent
-    );
-
+// ⚡ Bolt: Use pre-computed properties from `MetadataCache` directly
+// to avoid calculating duration percentages and running `format!`
+// dynamically on every UI render frame.
+fn draw_progress(f: &mut Frame, area: Rect, cache: &MetadataCache, theme: Theme) {
     let gauge = Gauge::default()
         .block(
             Block::default()
@@ -841,7 +831,7 @@ fn draw_progress(f: &mut Frame, area: Rect, track: &Track, theme: Theme) {
                 .border_style(Style::default().fg(theme.dim))
                 .title(vec![
                     Span::styled(" [ ", Style::default().fg(theme.dim)),
-                    Span::styled(label, Style::default().fg(theme.dim)),
+                    Span::styled(&cache.gauge_label, Style::default().fg(theme.dim)),
                     Span::styled(" ] ", Style::default().fg(theme.dim)),
                 ]),
         )
@@ -850,7 +840,7 @@ fn draw_progress(f: &mut Frame, area: Rect, track: &Track, theme: Theme) {
         } else {
             theme.dim
         }))
-        .percent(progress_percent.min(100))
+        .percent(cache.progress_percent.min(100))
         .label("");
 
     f.render_widget(gauge, area);
@@ -925,7 +915,7 @@ fn draw_artwork(
 fn draw_metadata(
     f: &mut Frame,
     area: Rect,
-    track: &Track,
+    cache: &MetadataCache,
     animation_frame: u32,
     is_two_columns: bool,
     theme: Theme,
@@ -961,15 +951,13 @@ fn draw_metadata(
         vec!["TRACK TITLE", "ARTIST", "ALBUM REFERENCE"]
     };
 
+    // ⚡ Bolt: Pass &str references instead of cloning the Strings from cache
+    // to completely eliminate heap allocation during the `draw` metadata rendering.
     let values = [
-        track.name.to_uppercase(),
-        track.artist.to_uppercase(),
-        track.album.to_uppercase(),
-        format!(
-            "{} / {}",
-            format_duration(track.position),
-            format_duration(track.duration)
-        ),
+        cache.name.as_str(),
+        cache.artist.as_str(),
+        cache.album.as_str(),
+        cache.duration_str.as_str(),
     ];
 
     let _available_height = area.height as usize;
@@ -1008,7 +996,7 @@ fn draw_metadata(
                         .add_modifier(Modifier::ITALIC),
                 )));
 
-                let display_val = scroll_text(&values[i], col_width, animation_frame);
+                let display_val = scroll_text(values[i], col_width, animation_frame);
 
                 lines.push(Line::from(Span::styled(
                     format!(" {} ", display_val),
@@ -1044,7 +1032,7 @@ fn draw_metadata(
                     .add_modifier(Modifier::ITALIC),
             )));
 
-            let display_val = scroll_text(&values[i], col_width, animation_frame);
+            let display_val = scroll_text(values[i], col_width, animation_frame);
 
             lines.push(Line::from(Span::styled(
                 format!(" {} ", display_val),
@@ -1199,11 +1187,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         (info_chunk, Rect::default())
     };
 
-    if let Some(track) = app.current_track.as_ref() {
+    if let Some(cache) = app.metadata_cache.as_ref() {
         draw_metadata(
             f,
             metadata_area,
-            track,
+            cache,
             app.animation_frame,
             is_two_columns,
             theme,
@@ -1227,8 +1215,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         }
     }
     if let Some(tuner_area) = tuner_area {
-        if let Some(track) = app.get_current_track() {
-            draw_progress(f, tuner_area, track, theme);
+        if let Some(cache) = app.metadata_cache.as_ref() {
+            draw_progress(f, tuner_area, cache, theme);
         }
     }
     if let Some(control_area) = control_area {
