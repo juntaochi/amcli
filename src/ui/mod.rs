@@ -820,19 +820,9 @@ fn draw_idle(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) {
     f.render_widget(idle_p, area);
 }
 
-fn draw_progress(f: &mut Frame, area: Rect, track: &Track, theme: Theme) {
-    let progress_percent = if track.duration.as_secs() > 0 {
-        ((track.position.as_secs_f64() / track.duration.as_secs_f64()) * 100.0) as u16
-    } else {
-        0
-    };
-
-    let label = format!(
-        " {}/{} | {:02}% ",
-        format_duration_seconds(track.position),
-        format_duration_seconds(track.duration),
-        progress_percent
-    );
+fn draw_progress(f: &mut Frame, area: Rect, cache: &MetadataCache, theme: Theme) {
+    let progress_percent = cache.progress_percent;
+    let label = cache.gauge_label.as_str();
 
     let gauge = Gauge::default()
         .block(
@@ -922,10 +912,11 @@ fn draw_artwork(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_metadata(
     f: &mut Frame,
     area: Rect,
-    track: &Track,
+    cache: &MetadataCache,
     animation_frame: u32,
     is_two_columns: bool,
     theme: Theme,
@@ -962,14 +953,10 @@ fn draw_metadata(
     };
 
     let values = [
-        track.name.to_uppercase(),
-        track.artist.to_uppercase(),
-        track.album.to_uppercase(),
-        format!(
-            "{} / {}",
-            format_duration(track.position),
-            format_duration(track.duration)
-        ),
+        cache.name.as_str(),
+        cache.artist.as_str(),
+        cache.album.as_str(),
+        cache.duration_str.as_str(),
     ];
 
     let _available_height = area.height as usize;
@@ -1008,7 +995,7 @@ fn draw_metadata(
                         .add_modifier(Modifier::ITALIC),
                 )));
 
-                let display_val = scroll_text(&values[i], col_width, animation_frame);
+                let display_val = scroll_text(values[i], col_width, animation_frame);
 
                 lines.push(Line::from(Span::styled(
                     format!(" {} ", display_val),
@@ -1044,7 +1031,7 @@ fn draw_metadata(
                     .add_modifier(Modifier::ITALIC),
             )));
 
-            let display_val = scroll_text(&values[i], col_width, animation_frame);
+            let display_val = scroll_text(values[i], col_width, animation_frame);
 
             lines.push(Line::from(Span::styled(
                 format!(" {} ", display_val),
@@ -1199,11 +1186,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         (info_chunk, Rect::default())
     };
 
-    if let Some(track) = app.current_track.as_ref() {
+    if let Some(cache) = app.metadata_cache.as_ref() {
         draw_metadata(
             f,
             metadata_area,
-            track,
+            cache,
             app.animation_frame,
             is_two_columns,
             theme,
@@ -1227,8 +1214,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         }
     }
     if let Some(tuner_area) = tuner_area {
-        if let Some(track) = app.get_current_track() {
-            draw_progress(f, tuner_area, track, theme);
+        if let Some(cache) = app.metadata_cache.as_ref() {
+            draw_progress(f, tuner_area, cache, theme);
         }
     }
     if let Some(control_area) = control_area {
@@ -1405,6 +1392,14 @@ mod tests {
         let backend = TestBackend::new(120, 40);
         let mut terminal = Terminal::new(backend).unwrap();
 
+        app.metadata_cache = Some(crate::ui::MetadataCache {
+            name: "TEST SONG".into(),
+            artist: "TEST ARTIST".into(),
+            album: "TEST ALBUM".into(),
+            duration_str: "02:30 / 05:00".into(),
+            gauge_label: " 150s/300s | 50% ".into(),
+            progress_percent: 50,
+        });
         terminal.draw(|f| draw(f, &mut app)).unwrap();
 
         let buffer = terminal.backend().buffer();
