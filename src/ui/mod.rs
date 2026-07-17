@@ -820,19 +820,32 @@ fn draw_idle(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) {
     f.render_widget(idle_p, area);
 }
 
-fn draw_progress(f: &mut Frame, area: Rect, track: &Track, theme: Theme) {
-    let progress_percent = if track.duration.as_secs() > 0 {
-        ((track.position.as_secs_f64() / track.duration.as_secs_f64()) * 100.0) as u16
+fn draw_progress(
+    f: &mut Frame,
+    area: Rect,
+    track: &Track,
+    cache: Option<&MetadataCache>,
+    theme: Theme,
+) {
+    let (progress_percent, label) = if let Some(cache) = cache {
+        (
+            cache.progress_percent,
+            Cow::Borrowed(cache.gauge_label.as_str()),
+        )
     } else {
-        0
+        let percent = if track.duration.as_secs() > 0 {
+            ((track.position.as_secs_f64() / track.duration.as_secs_f64()) * 100.0) as u16
+        } else {
+            0
+        };
+        let lbl = format!(
+            " {}/{} | {:02}% ",
+            format_duration_seconds(track.position),
+            format_duration_seconds(track.duration),
+            percent
+        );
+        (percent, Cow::Owned(lbl))
     };
-
-    let label = format!(
-        " {}/{} | {:02}% ",
-        format_duration_seconds(track.position),
-        format_duration_seconds(track.duration),
-        progress_percent
-    );
 
     let gauge = Gauge::default()
         .block(
@@ -922,10 +935,12 @@ fn draw_artwork(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_metadata(
     f: &mut Frame,
     area: Rect,
     track: &Track,
+    cache: Option<&MetadataCache>,
     animation_frame: u32,
     is_two_columns: bool,
     theme: Theme,
@@ -961,16 +976,25 @@ fn draw_metadata(
         vec!["TRACK TITLE", "ARTIST", "ALBUM REFERENCE"]
     };
 
-    let values = [
-        track.name.to_uppercase(),
-        track.artist.to_uppercase(),
-        track.album.to_uppercase(),
-        format!(
-            "{} / {}",
-            format_duration(track.position),
-            format_duration(track.duration)
-        ),
-    ];
+    let values = if let Some(cache) = cache {
+        [
+            Cow::Borrowed(cache.name.as_str()),
+            Cow::Borrowed(cache.artist.as_str()),
+            Cow::Borrowed(cache.album.as_str()),
+            Cow::Borrowed(cache.duration_str.as_str()),
+        ]
+    } else {
+        [
+            Cow::Owned(track.name.to_uppercase()),
+            Cow::Owned(track.artist.to_uppercase()),
+            Cow::Owned(track.album.to_uppercase()),
+            Cow::Owned(format!(
+                "{} / {}",
+                format_duration(track.position),
+                format_duration(track.duration)
+            )),
+        ]
+    };
 
     let _available_height = area.height as usize;
     let items_count = labels.len();
@@ -1204,6 +1228,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             f,
             metadata_area,
             track,
+            app.metadata_cache.as_ref(),
             app.animation_frame,
             is_two_columns,
             theme,
@@ -1228,7 +1253,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
     if let Some(tuner_area) = tuner_area {
         if let Some(track) = app.get_current_track() {
-            draw_progress(f, tuner_area, track, theme);
+            draw_progress(f, tuner_area, track, app.metadata_cache.as_ref(), theme);
         }
     }
     if let Some(control_area) = control_area {
