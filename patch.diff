@@ -1,0 +1,11 @@
+--- src/ui/mod.rs
++++ src/ui/mod.rs
+@@ -766,7 +766,7 @@
+         f.render_widget(chassis_block, area);
+
+         for y in (inner.top()..inner.bottom()).step_by(2) {
+-            let line = Paragraph::new(" ".repeat(inner.width as usize)).style(
++            let line = Block::default().style(
+                 Style::default()
+                     .bg(Color::Rgb(5, 5, 5))
+                     .add_modifier(Modifier::DIM),
