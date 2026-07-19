@@ -764,7 +764,7 @@ fn draw_chassis(f: &mut Frame, area: Rect, theme: Theme, is_jp: bool) -> Rect {
         f.render_widget(chassis_block, area);
 
         for y in (inner.top()..inner.bottom()).step_by(2) {
-            let line = Block::default().style(
+            let line = Paragraph::new(" ".repeat(inner.width as usize)).style(
                 Style::default()
                     .bg(Color::Rgb(5, 5, 5))
                     .add_modifier(Modifier::DIM),
