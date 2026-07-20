@@ -922,10 +922,12 @@ fn draw_artwork(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_metadata(
     f: &mut Frame,
     area: Rect,
     track: &Track,
+    cache: Option<&MetadataCache>,
     animation_frame: u32,
     is_two_columns: bool,
     theme: Theme,
@@ -961,16 +963,25 @@ fn draw_metadata(
         vec!["TRACK TITLE", "ARTIST", "ALBUM REFERENCE"]
     };
 
-    let values = [
-        track.name.to_uppercase(),
-        track.artist.to_uppercase(),
-        track.album.to_uppercase(),
-        format!(
-            "{} / {}",
-            format_duration(track.position),
-            format_duration(track.duration)
-        ),
-    ];
+    let values: [std::borrow::Cow<'_, str>; 4] = if let Some(c) = cache {
+        [
+            std::borrow::Cow::Borrowed(c.name.as_str()),
+            std::borrow::Cow::Borrowed(c.artist.as_str()),
+            std::borrow::Cow::Borrowed(c.album.as_str()),
+            std::borrow::Cow::Borrowed(c.duration_str.as_str()),
+        ]
+    } else {
+        [
+            std::borrow::Cow::Owned(track.name.to_uppercase()),
+            std::borrow::Cow::Owned(track.artist.to_uppercase()),
+            std::borrow::Cow::Owned(track.album.to_uppercase()),
+            std::borrow::Cow::Owned(format!(
+                "{} / {}",
+                format_duration(track.position),
+                format_duration(track.duration)
+            )),
+        ]
+    };
 
     let _available_height = area.height as usize;
     let items_count = labels.len();
@@ -1204,6 +1215,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             f,
             metadata_area,
             track,
+            app.metadata_cache.as_ref(),
             app.animation_frame,
             is_two_columns,
             theme,
