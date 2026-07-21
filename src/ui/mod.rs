@@ -550,13 +550,13 @@ impl App {
             };
             cache.duration_str = format!(
                 "{} / {}",
-                format_duration(track.position),
-                format_duration(track.duration)
+                FmtDuration(track.position),
+                FmtDuration(track.duration)
             );
             cache.gauge_label = format!(
                 " {}/{} | {:02}% ",
-                format_duration_seconds(track.position),
-                format_duration_seconds(track.duration),
+                FmtDurationSeconds(track.position),
+                FmtDurationSeconds(track.duration),
                 progress_percent
             );
             cache.progress_percent = progress_percent;
@@ -829,8 +829,8 @@ fn draw_progress(f: &mut Frame, area: Rect, track: &Track, theme: Theme) {
 
     let label = format!(
         " {}/{} | {:02}% ",
-        format_duration_seconds(track.position),
-        format_duration_seconds(track.duration),
+        FmtDurationSeconds(track.position),
+        FmtDurationSeconds(track.duration),
         progress_percent
     );
 
@@ -967,8 +967,8 @@ fn draw_metadata(
         track.album.to_uppercase(),
         format!(
             "{} / {}",
-            format_duration(track.position),
-            format_duration(track.duration)
+            FmtDuration(track.position),
+            FmtDuration(track.duration)
         ),
     ];
 
@@ -1239,18 +1239,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if app.settings_menu.is_open {
         app.settings_menu.render(f, theme);
     }
-}
-
-fn format_duration_seconds(duration: Duration) -> String {
-    let total_seconds = duration.as_secs();
-    format!("{}s", total_seconds)
-}
-
-fn format_duration(duration: Duration) -> String {
-    let total_seconds = duration.as_secs();
-    let minutes = total_seconds / 60;
-    let seconds = total_seconds % 60;
-    format!("{:02}:{:02}", minutes, seconds)
 }
 
 // Marquee scroll measured by display width (columns), so full-width CJK glyphs
@@ -1570,5 +1558,22 @@ mod tests {
                 width - 1
             );
         }
+    }
+}
+
+struct FmtDurationSeconds(Duration);
+impl std::fmt::Display for FmtDurationSeconds {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}s", self.0.as_secs())
+    }
+}
+
+struct FmtDuration(Duration);
+impl std::fmt::Display for FmtDuration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let total_seconds = self.0.as_secs();
+        let minutes = total_seconds / 60;
+        let seconds = total_seconds % 60;
+        write!(f, "{:02}:{:02}", minutes, seconds)
     }
 }
